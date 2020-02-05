@@ -1,6 +1,6 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.transactions.signatory.impl;
@@ -12,6 +12,7 @@ import iroha.protocol.Endpoint.ToriiResponse;
 import iroha.protocol.Endpoint.TxStatus;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.TransactionBatch;
+import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.signatory.TransactionSigner;
 import iroha.validation.transactions.storage.TransactionVerdictStorage;
 import iroha.validation.utils.ValidationUtils;
@@ -19,8 +20,10 @@ import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
 import jp.co.soramitsu.iroha.java.Utils;
@@ -39,13 +42,15 @@ public class TransactionSignerImpl implements TransactionSigner {
   private final KeyPair brvsAccountKeyPair;
   private final List<KeyPair> keyPairs;
   private final TransactionVerdictStorage transactionVerdictStorage;
+  private final RegistrationProvider registrationProvider;
   private final Scheduler scheduler = Schedulers.from(Executors.newCachedThreadPool());
 
   public TransactionSignerImpl(IrohaAPI irohaAPI,
       List<KeyPair> keyPairs,
       String brvsAccountId,
       KeyPair brvsAccountKeyPair,
-      TransactionVerdictStorage transactionVerdictStorage) {
+      TransactionVerdictStorage transactionVerdictStorage,
+      RegistrationProvider registrationProvider) {
     Objects.requireNonNull(irohaAPI, "Iroha API must not be null");
     if (CollectionUtils.isEmpty(keyPairs)) {
       throw new IllegalArgumentException("Keypairs must not be neither null nor empty");
@@ -55,12 +60,14 @@ public class TransactionSignerImpl implements TransactionSigner {
     }
     Objects.requireNonNull(brvsAccountKeyPair, "Brvs key pair must not be null");
     Objects.requireNonNull(keyPairs, "TransactionVerdictStorage must not be null");
+    Objects.requireNonNull(registrationProvider, "RegistrationProvider must not be null");
 
     this.irohaAPI = irohaAPI;
     this.brvsAccountId = brvsAccountId;
     this.brvsAccountKeyPair = brvsAccountKeyPair;
     this.keyPairs = keyPairs;
     this.transactionVerdictStorage = transactionVerdictStorage;
+    this.registrationProvider = registrationProvider;
   }
 
   /**
@@ -71,7 +78,6 @@ public class TransactionSignerImpl implements TransactionSigner {
     for (Transaction transaction : transactionBatch) {
       transactionVerdictStorage.markTransactionValidated(ValidationUtils.hexHash(transaction));
     }
-    logger.info("Transactions have been successfully validated and signed");
     if (isCreatedByBrvs(transactionBatch)) {
       sendBrvsTransactionBatch(transactionBatch, brvsAccountKeyPair);
     } else {
@@ -86,26 +92,35 @@ public class TransactionSignerImpl implements TransactionSigner {
   }
 
   private void sendUserTransactionBatch(TransactionBatch transactionBatch) {
+    addSignaturesAndSend(transactionBatch, true);
+  }
+
+  private void addSignaturesAndSend(TransactionBatch transactionBatch, boolean useUserKeypairs) {
     final List<Transaction> transactions = new ArrayList<>(
         transactionBatch.getTransactionList().size()
     );
+    final Set<String> accounts = registrationProvider.getRegisteredAccounts();
     for (Transaction transaction : transactionBatch) {
-      jp.co.soramitsu.iroha.java.Transaction parsedTransaction = jp.co.soramitsu.iroha.java.Transaction
-          .parseFrom(transaction);
-      final int signaturesCount = transaction.getSignaturesCount();
-      if (signaturesCount > keyPairs.size()) {
-        throw new IllegalStateException(
-            "Too many user signatures in the transaction: " + signaturesCount +
-                ". Key list size is " + keyPairs.size());
-      }
-      // Since we assume brvs signatures must be as many as users
-      parsedTransaction = parsedTransaction.makeMutable().build();
-      for (int i = 0; i < signaturesCount; i++) {
-        parsedTransaction.sign(keyPairs.get(i));
+      jp.co.soramitsu.iroha.java.Transaction parsedTransaction =
+          jp.co.soramitsu.iroha.java.Transaction.parseFrom(transaction);
+      if (accounts.contains(ValidationUtils.getTxAccountId(transaction))) {
+        final int signaturesCount = transaction.getSignaturesCount();
+        if (useUserKeypairs && signaturesCount > keyPairs.size()) {
+          throw new IllegalStateException(
+              "Too many user signatures in the transaction: " + signaturesCount +
+                  ". Key list size is " + keyPairs.size());
+        }
+        // Since we assume brvs signatures must be as many as users
+        parsedTransaction = parsedTransaction.makeMutable().build();
+        IntStream.range(0, signaturesCount)
+            .mapToObj(index ->
+                useUserKeypairs ? keyPairs.get(index) : ValidationUtils.generateKeypair()
+            )
+            .forEach(parsedTransaction::sign);
       }
       transactions.add(parsedTransaction.build());
     }
-    sendTransactions(transactions, true);
+    sendTransactions(transactions, useUserKeypairs);
   }
 
   private void sendTransactions(List<Transaction> transactions, boolean check) {
@@ -125,36 +140,8 @@ public class TransactionSignerImpl implements TransactionSigner {
     }
   }
 
-  private void checkIrohaStatus(Transaction transaction) {
-    final ToriiResponse statusResponse = ValidationUtils.subscriptionStrategy
-        .subscribe(irohaAPI, Utils.hash(transaction))
-        .blockingLast();
-    if (!statusResponse.getTxStatus().equals(TxStatus.COMMITTED)) {
-      logger.warn("Transaction " + ValidationUtils.hexHash(transaction) + " failed in Iroha: "
-          + statusResponse.getTxStatus());
-      transactionVerdictStorage.markTransactionFailed(
-          ValidationUtils.hexHash(transaction),
-          statusResponse.getTxStatus() + " : " + statusResponse.getErrOrCmdName()
-      );
-    }
-  }
-
   private void sendRejectedUserTransaction(TransactionBatch transactionBatch) {
-    final List<Transaction> transactions = new ArrayList<>(
-        transactionBatch.getTransactionList().size()
-    );
-    for (Transaction transaction : transactionBatch) {
-      final jp.co.soramitsu.iroha.java.Transaction parsedTransaction = jp.co.soramitsu.iroha.java.Transaction
-          .parseFrom(transaction);
-      final int signaturesCount = transaction.getSignaturesCount();
-
-      // Since we assume brvs signatures must be as many as users
-      for (int i = 0; i < signaturesCount; i++) {
-        parsedTransaction.sign(ValidationUtils.generateKeypair());
-      }
-      transactions.add(parsedTransaction.build());
-    }
-    sendTransactions(transactions, false);
+    addSignaturesAndSend(transactionBatch, false);
   }
 
   private void sendBrvsTransactionBatch(TransactionBatch transactionBatch, KeyPair keyPair) {
@@ -198,7 +185,6 @@ public class TransactionSignerImpl implements TransactionSigner {
           reason
       );
     }
-    logger.info("Transactions have been rejected by the service. Reason: " + reason);
     if (isCreatedByBrvs(transactionBatch)) {
       sendBrvsTransactionBatch(transactionBatch, ValidationUtils.generateKeypair());
     } else {
@@ -215,6 +201,23 @@ public class TransactionSignerImpl implements TransactionSigner {
 
     IrohaStatusRunnable(Transaction transaction) {
       this.transaction = transaction;
+    }
+
+    private void checkIrohaStatus(Transaction transaction) {
+      final ToriiResponse statusResponse = ValidationUtils.subscriptionStrategy
+          .subscribe(irohaAPI, Utils.hash(transaction))
+          .blockingLast();
+      if (!statusResponse.getTxStatus().equals(TxStatus.COMMITTED)) {
+        logger.warn(
+            "Transaction {} failed in Iroha: {}",
+            ValidationUtils.hexHash(transaction),
+            statusResponse.getTxStatus()
+        );
+        transactionVerdictStorage.markTransactionFailed(
+            ValidationUtils.hexHash(transaction),
+            statusResponse.getTxStatus() + " : " + statusResponse.getErrOrCmdName()
+        );
+      }
     }
 
     @Override

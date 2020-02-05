@@ -1,9 +1,12 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.rules.impl.whitelist;
+
+import static jp.co.soramitsu.iroha.java.Utils.IROHA_FRIENDLY_NEW_LINE;
+import static jp.co.soramitsu.iroha.java.Utils.IROHA_FRIENDLY_QUOTE;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -22,7 +25,6 @@ public class WhitelistUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(WhitelistUtils.class);
 
-
   public static final String ETH_WHITELIST_KEY = "eth_whitelist";
   public static final String BTC_WHITELIST_KEY = "btc_whitelist";
 
@@ -30,17 +32,17 @@ public class WhitelistUtils {
 
   static {
     assetToWhitelistKey = new HashMap<>();
-    assetToWhitelistKey.put("ethereum", "eth_whitelist");
-    assetToWhitelistKey.put("sora", "eth_whitelist");
-    assetToWhitelistKey.put("bitcoin", "btc_whitelist");
+    assetToWhitelistKey.put("ethereum", ETH_WHITELIST_KEY);
+    assetToWhitelistKey.put("sora", ETH_WHITELIST_KEY);
+    assetToWhitelistKey.put("bitcoin", BTC_WHITELIST_KEY);
   }
-
-  // Iroha friendly symbols
-  private static String IROHA_FRIENDLY_QUOTE = "\\\"";
-  private static String IROHA_FRIENDLY_EOL = "\\n";
 
   private static Gson gson = new GsonBuilder().create();
   private static JsonParser parser = new JsonParser();
+
+  private WhitelistUtils() {
+    throw new IllegalStateException("Must not be instantiated");
+  }
 
   /**
    * Get whitelist that was set by BRVS
@@ -61,11 +63,11 @@ public class WhitelistUtils {
       logger.debug("Got BRVS whitelist: " + detail);
 
       JsonObject accountNode = parser.parse(detail).getAsJsonObject();
-      if (accountNode.get(brvsAccountId).isJsonNull()) {
+      if (accountNode.size() == 0 || accountNode.get(brvsAccountId).isJsonNull()) {
         return new HashMap<>();
       }
       JsonObject keyNode = accountNode.getAsJsonObject(brvsAccountId);
-      if (keyNode.get(whitelistKey).isJsonNull()) {
+      if (keyNode.size() == 0 || keyNode.get(whitelistKey).isJsonNull()) {
         return new HashMap<>();
       }
       String whitelistJSON = keyNode.getAsJsonPrimitive(whitelistKey).getAsString();
@@ -85,7 +87,7 @@ public class WhitelistUtils {
    * @return domain of asset
    */
   public static String getAssetDomain(String assetId) {
-    return assetId.substring(assetId.lastIndexOf("#") + 1);
+    return assetId.substring(assetId.lastIndexOf('#') + 1);
   }
 
   /**
@@ -129,7 +131,7 @@ public class WhitelistUtils {
    */
   public static String irohaEscape(String str) {
     return str.replace("\"", IROHA_FRIENDLY_QUOTE)
-        .replace("\n", IROHA_FRIENDLY_EOL);
+        .replace("\n", IROHA_FRIENDLY_NEW_LINE);
   }
 
   /**
@@ -137,6 +139,6 @@ public class WhitelistUtils {
    */
   public static String irohaUnEscape(String str) {
     return str.replace(IROHA_FRIENDLY_QUOTE, "\"")
-        .replace(IROHA_FRIENDLY_EOL, "\n");
+        .replace(IROHA_FRIENDLY_NEW_LINE, "\n");
   }
 }

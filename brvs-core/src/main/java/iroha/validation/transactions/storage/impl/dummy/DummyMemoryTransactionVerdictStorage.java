@@ -1,6 +1,6 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.transactions.storage.impl.dummy;
@@ -74,6 +74,6 @@ public class DummyMemoryTransactionVerdictStorage implements TransactionVerdictS
 
   @Override
   public void close() {
-
+    // nothing to close
   }
 }

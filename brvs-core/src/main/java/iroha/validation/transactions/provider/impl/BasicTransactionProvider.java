@@ -1,15 +1,23 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.transactions.provider.impl;
 
-import static iroha.validation.utils.ValidationUtils.PROPORTION;
+import static com.d3.commons.util.ThreadUtilKt.createPrettyScheduledThreadPool;
+import static com.d3.commons.util.ThreadUtilKt.createPrettySingleThreadPool;
+import static iroha.validation.utils.ValidationUtils.getTxAccountId;
+import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
 import com.google.common.base.Strings;
 import io.reactivex.Observable;
+import io.reactivex.Scheduler;
+import io.reactivex.schedulers.Schedulers;
+import iroha.protocol.BlockOuterClass.Block;
+import iroha.protocol.Commands.AddSignatory;
 import iroha.protocol.Commands.Command;
+import iroha.protocol.Commands.RemoveSignatory;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.listener.BrvsIrohaChainListener;
 import iroha.validation.transactions.TransactionBatch;
@@ -20,17 +28,21 @@ import iroha.validation.transactions.provider.impl.util.CacheProvider;
 import iroha.validation.transactions.storage.BlockStorage;
 import iroha.validation.transactions.storage.TransactionVerdictStorage;
 import iroha.validation.utils.ValidationUtils;
+import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Service interacting with cached user transactions queues and block listener
+ */
 public class BasicTransactionProvider implements TransactionProvider {
 
   private static final Logger logger = LoggerFactory.getLogger(BasicTransactionProvider.class);
@@ -41,7 +53,15 @@ public class BasicTransactionProvider implements TransactionProvider {
   private final RegistrationProvider registrationProvider;
   private final BlockStorage blockStorage;
   private final BrvsIrohaChainListener irohaReliableChainListener;
-  private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
+  private final ScheduledExecutorService executor = createPrettyScheduledThreadPool(
+      "brvs", "pending-processor"
+  );
+  private final Scheduler blockScheduler = Schedulers.from(createPrettySingleThreadPool(
+      "brvs", "block-processor"
+  ));
+  private final Scheduler rejectScheduler = Schedulers.from(createPrettySingleThreadPool(
+      "brvs", "rejects-processor"
+  ));
   private final Set<String> userDomains;
   private boolean isStarted;
 
@@ -80,36 +100,52 @@ public class BasicTransactionProvider implements TransactionProvider {
   public synchronized Observable<TransactionBatch> getPendingTransactionsStreaming() {
     if (!isStarted) {
       logger.info("Starting pending transactions streaming");
-      executorService.scheduleAtFixedRate(this::monitorIrohaPending, 0, 2, TimeUnit.SECONDS);
-      executorService.schedule(this::processBlockTransactions, 0, TimeUnit.SECONDS);
-      executorService.schedule(this::processRejectedTransactions, 0, TimeUnit.SECONDS);
+      executor.scheduleAtFixedRate(this::monitorIrohaPending, 0, 2, TimeUnit.SECONDS);
+      processBlockTransactions(blockScheduler);
+      processRejectedTransactions(rejectScheduler);
       isStarted = true;
     }
     return cacheProvider.getObservable();
   }
 
   private void monitorIrohaPending() {
-    irohaReliableChainListener
-        .getAllPendingTransactions(registrationProvider.getRegisteredAccounts())
-        .forEach(transactionBatch -> {
-              // if only BRVS signatory remains
-              if (isBatchSignedByUsers(transactionBatch)) {
-                if (savedMissingInStorage(transactionBatch)) {
+    try {
+      final Set<String> accounts = registrationProvider.getRegisteredAccounts();
+      irohaReliableChainListener
+          .getAllPendingTransactions(accounts)
+          .forEach(transactionBatch -> {
+                // if only BRVS signatory remains
+                if (isBatchSignedByUsers(transactionBatch, accounts) &&
+                    savedMissingInStorage(transactionBatch)) {
                   cacheProvider.put(transactionBatch);
                 }
               }
-            }
+          );
+    } catch (Exception e) {
+      logger.error("Pending transactions monitor encountered an error", e);
+      System.exit(1);
+    }
+  }
+
+  private boolean isBatchSignedByUsers(TransactionBatch transactionBatch,
+      Set<String> userAccounts) {
+    return transactionBatch
+        .stream()
+        .filter(transaction -> userAccounts.contains(getTxAccountId(transaction)))
+        .allMatch(transaction ->
+            transaction.getSignaturesCount() >= getSignatoriesToPresentNum(transaction)
         );
   }
 
-  private boolean isBatchSignedByUsers(TransactionBatch transactionBatch) {
-    for (Transaction transaction : transactionBatch) {
-      if (transaction.getSignaturesCount() < userQuorumProvider.getUserQuorumDetail(
-          transaction.getPayload().getReducedPayload().getCreatorAccountId())) {
-        return false;
-      }
+  private int getSignatoriesToPresentNum(Transaction transaction) {
+    final String creatorAccountId = getTxAccountId(transaction);
+    int signatoriesToPresent = userQuorumProvider
+        .getUserSignatoriesDetail(creatorAccountId).size();
+    if (signatoriesToPresent == 0) {
+      signatoriesToPresent =
+          userQuorumProvider.getUserAccountQuorum(creatorAccountId) / ValidationUtils.PROPORTION;
     }
-    return true;
+    return signatoriesToPresent;
   }
 
   private boolean savedMissingInStorage(TransactionBatch transactionBatch) {
@@ -124,28 +160,33 @@ public class BasicTransactionProvider implements TransactionProvider {
     return result;
   }
 
-  private void processRejectedTransactions() {
+  private void processRejectedTransactions(Scheduler scheduler) {
     transactionVerdictStorage.getRejectedOrFailedTransactionsHashesStreaming()
+        .observeOn(scheduler)
         .subscribe(this::tryToRemoveLock);
   }
 
-  private void processBlockTransactions() {
-    irohaReliableChainListener.getBlockStreaming().subscribe(block -> {
-          /*
-          We do not process rejected hashes of blocks in order to support fail fast behavior
-          BRVS fake key pair leads to STATELESS_INVALID status so such transactions
-          are not presented in ledger blocks at all
-           */
-          // Store new block first
-          blockStorage.store(block);
-          processCommitted(
-              block
-                  .getBlockV1()
-                  .getPayload()
-                  .getTransactionsList()
-          );
-        }
-    );
+  private void processBlockTransactions(Scheduler scheduler) {
+    irohaReliableChainListener.getBlockStreaming()
+        .observeOn(scheduler)
+        .subscribe(blockSubscription -> {
+              try {
+                // Store new block first
+                final Block block = blockSubscription.getBlock();
+                blockStorage.store(block);
+                processCommitted(
+                    block
+                        .getBlockV1()
+                        .getPayload()
+                        .getTransactionsList()
+                );
+                blockSubscription.getAcknowledgment().ack();
+              } catch (Exception e) {
+                logger.error("Block processor encountered an error", e);
+                System.exit(1);
+              }
+            }
+        );
     irohaReliableChainListener.listen();
   }
 
@@ -154,10 +195,12 @@ public class BasicTransactionProvider implements TransactionProvider {
       blockTransactions.forEach(transaction -> {
             tryToRemoveLock(transaction);
             try {
-              modifyUserQuorumIfNeeded(transaction);
               registerCreatedAccountByTransactionScanning(transaction);
+              modifyUserQuorumIfNeeded(transaction);
             } catch (Exception e) {
-              logger.warn("Couldn't process account changes from the committed block", e);
+              throw new IllegalStateException(
+                  "Couldn't process account changes from the committed block", e
+              );
             }
           }
       );
@@ -165,30 +208,60 @@ public class BasicTransactionProvider implements TransactionProvider {
   }
 
   private void modifyUserQuorumIfNeeded(Transaction blockTransaction) {
-    final String creatorAccountId = blockTransaction.getPayload().getReducedPayload()
-        .getCreatorAccountId();
+    final String creatorAccountId = getTxAccountId(blockTransaction);
+    if (!userDomains.contains(getDomain(creatorAccountId))) {
+      return;
+    }
 
-    final long syncTime = blockTransaction.getPayload().getReducedPayload().getCreatedTime();
+    if (!registrationProvider.getRegisteredAccounts().contains(creatorAccountId)) {
+      return;
+    }
 
-    blockTransaction
+    final List<Command> commands = blockTransaction
         .getPayload()
         .getReducedPayload()
-        .getCommandsList()
+        .getCommandsList();
+
+    final Set<String> addedSignatories = commands
         .stream()
-        .filter(command -> userDomains.contains(getDomain(creatorAccountId)))
-        .filter(Command::hasSetAccountQuorum)
-        .map(Command::getSetAccountQuorum)
-        .forEach(command -> {
-          userQuorumProvider
-              .setUserQuorumDetail(creatorAccountId,
-                  command.getQuorum() / PROPORTION, syncTime);
-          userQuorumProvider.setUserAccountQuorum(creatorAccountId,
-              userQuorumProvider.getValidQuorumForUserAccount(creatorAccountId), syncTime);
-        });
+        .filter(Command::hasAddSignatory)
+        .map(Command::getAddSignatory)
+        .filter(command -> command.getAccountId().equals(creatorAccountId))
+        .map(AddSignatory::getPublicKey)
+        .map(String::toUpperCase)
+        .collect(Collectors.toSet());
+    final Set<String> removedSignatories = commands
+        .stream()
+        .filter(Command::hasRemoveSignatory)
+        .map(Command::getRemoveSignatory)
+        .filter(command -> command.getAccountId().equals(creatorAccountId))
+        .map(RemoveSignatory::getPublicKey)
+        .map(String::toUpperCase)
+        .collect(Collectors.toSet());
+
+    if (addedSignatories.isEmpty() && removedSignatories.isEmpty()) {
+      return;
+    }
+
+    final Set<String> userSignatories = new HashSet<>(
+        userQuorumProvider.getUserSignatoriesDetail(creatorAccountId)
+    );
+    userSignatories.removeAll(removedSignatories);
+    userSignatories.addAll(addedSignatories);
+    if (userSignatories.isEmpty()) {
+      logger.warn("User {} tried to delete all their keys", creatorAccountId);
+      return;
+    }
+    logger.info("Going to modify account {} quorum", creatorAccountId);
+    userQuorumProvider.setUserQuorumDetail(creatorAccountId, userSignatories);
+    userQuorumProvider.setUserAccountQuorum(creatorAccountId,
+        userQuorumProvider.getValidQuorumForUserAccount(creatorAccountId)
+    );
   }
 
-  private void registerCreatedAccountByTransactionScanning(Transaction blockTransaction) {
-    blockTransaction
+  private void registerCreatedAccountByTransactionScanning(Transaction blockTransaction)
+      throws InterruptedException {
+    List<String> createAccountList = blockTransaction
         .getPayload()
         .getReducedPayload()
         .getCommandsList()
@@ -196,9 +269,17 @@ public class BasicTransactionProvider implements TransactionProvider {
         .filter(Command::hasCreateAccount)
         .map(Command::getCreateAccount)
         .filter(command -> userDomains.contains(command.getDomainId()))
-        .forEach(command -> registrationProvider
-            .register(String.format("%s@%s", command.getAccountName(), command.getDomainId()))
-        );
+        .map(command -> command.getAccountName().concat(accountIdDelimiter)
+            .concat(command.getDomainId()))
+        .collect(Collectors.toList());
+    if (!createAccountList.isEmpty()) {
+      final Set<String> userAccounts = registrationProvider.getUserAccounts();
+      createAccountList = createAccountList
+          .stream()
+          .filter(userAccounts::contains)
+          .collect(Collectors.toList());
+      registrationProvider.register(createAccountList);
+    }
   }
 
   private void tryToRemoveLock(Transaction transaction) {
@@ -206,19 +287,23 @@ public class BasicTransactionProvider implements TransactionProvider {
   }
 
   private void tryToRemoveLock(String hash) {
-    String account = cacheProvider.getAccountBlockedBy(hash);
-    if (account != null) {
-      cacheProvider.unlockPendingAccount(account);
-    }
+    cacheProvider.unlockPendingAccountsByHash(hash);
   }
 
   private String getDomain(String accountId) {
-    return accountId.split("@")[1];
+    try {
+      return accountId.split("@")[1];
+    } catch (Exception e) {
+      logger.warn("Couldn't parse domain of " + accountId, e);
+      return "";
+    }
   }
 
   @Override
-  public void close() {
-    executorService.shutdownNow();
+  public void close() throws IOException {
+    executor.shutdownNow();
+    blockScheduler.shutdown();
+    rejectScheduler.shutdown();
     irohaReliableChainListener.close();
   }
 }

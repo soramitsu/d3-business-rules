@@ -1,6 +1,6 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 buildscript {
@@ -29,7 +29,7 @@ shadowJar.archiveName = 'app.jar'
 
 // sora-plugin configs
 soramitsu {
-    projectGroup = 'brvs-deploy'
+    projectGroup = 'soranet'
     docker {
         // docker tag
         tag = System.getenv("TAG")
@@ -49,7 +49,13 @@ dependencies {
 
     compile project(':brvs-rules')
     // Notary
-    compile('com.github.d3ledger.notary:notary-commons:21dc1f835f')
+    compile('com.github.d3ledger.notary:notary-commons:9f811288a43c17dc01a1a6604080b45ad6be22f9') {
+        exclude group:  'com.github.hyperledger.iroha-java', module: 'client'
+    }
+    // Chain adapter
+    compile('com.github.d3ledger.chain-adapter:chain-adapter-client:e27b242699c776a92797efa1522f59ab20b737d8') {
+        exclude group:  'com.github.hyperledger.iroha-java', module: 'client'
+    }
     // MongoDB
     compile('org.mongodb:mongodb-driver-sync:3.10.1')
     // REST
@@ -60,12 +66,19 @@ dependencies {
     compile('org.slf4j:jul-to-slf4j:1.8.0-beta2')
     // Json utils
     compile('com.google.protobuf:protobuf-java-util:3.5.1')
+    // Groovy
+    compile('org.codehaus.groovy:groovy:3.0.0-alpha-4')
 
     // unit tests
     testCompile('org.junit.jupiter:junit-jupiter-api:5.4.0')
     testRuntime('org.junit.jupiter:junit-jupiter-engine:5.4.0')
     // Test containers iroha
-    testCompile('com.github.hyperledger.iroha-java:testcontainers:5.2.0')
+    testCompile('com.github.hyperledger.iroha-java:testcontainers:de13f51295')
+    // rest testing
+    testCompile('org.glassfish.jersey.test-framework.providers:jersey-test-framework-provider-grizzly2:2.28')
+    testCompile('org.glassfish.jersey.test-framework:jersey-test-framework-core:2.28')
+    // Mockito
+    testCompile('org.mockito:mockito-core:2.24.0')
 }
 
 test {
@@ -82,4 +95,41 @@ jar {
 
 shadowJar {
     mergeServiceFiles('META-INF/spring.*')
+}
+
+sourceSets {
+    integrationTest {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+            srcDirs += 'src/integration-test/java'
+        }
+        resources {
+            srcDirs = ["src/integration-test/resources"]
+        }
+    }
+}
+
+configurations {
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestCompile.extendsFrom testCompile
+    integrationTestRuntime.extendsFrom testRuntime
+}
+
+task integrationTest(type: Test) {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    description = 'Runs BRVS integration tests.'
+
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    // Enable JUnit5 tests
+    useJUnitPlatform {
+    }
+
+    mustRunAfter test
+}
+check.dependsOn integrationTest
+
+project.afterEvaluate {
+    test.finalizedBy(integrationTest)
 }

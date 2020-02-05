@@ -1,40 +1,50 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.listener;
 
-import com.d3.commons.config.RMQConfig;
-import com.d3.commons.sidechain.iroha.ReliableIrohaChainListener;
+import com.d3.chainadapter.client.BlockSubscription;
+import com.d3.chainadapter.client.RMQConfig;
+import com.d3.chainadapter.client.ReliableIrohaChainListener4J;
 import io.reactivex.Observable;
-import iroha.protocol.BlockOuterClass.Block;
+import iroha.protocol.QryResponses.ErrorResponse;
+import iroha.protocol.QryResponses.QueryResponse;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.TransactionBatch;
 import java.io.Closeable;
+import java.io.IOException;
 import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import jp.co.soramitsu.iroha.java.ErrorResponseException;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
+import jp.co.soramitsu.iroha.java.Query;
 import jp.co.soramitsu.iroha.java.QueryAPI;
-import kotlin.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * Wrapper class that reuses {@link ReliableIrohaChainListener4J} and provides additional
+ * functionality to make friendly processable abstraction on top of Iroha batches
+ */
 public class BrvsIrohaChainListener implements Closeable {
 
   private static final String BRVS_QUEUE_RMQ_NAME = "brvs";
+  private static final Logger logger = LoggerFactory.getLogger(BrvsIrohaChainListener.class);
+  private static AtomicLong counter = new AtomicLong(1);
 
   private final IrohaAPI irohaAPI;
   // BRVS keypair to query Iroha
   private final KeyPair brvsKeyPair;
   private final String brvsAccountId;
   private final KeyPair userKeyPair;
-  private final ReliableIrohaChainListener irohaChainListener;
-  private final ConcurrentMap<String, QueryAPI> queryAPIMap = new ConcurrentHashMap<>();
+  private final ReliableIrohaChainListener4J irohaChainListener;
 
   public BrvsIrohaChainListener(
       RMQConfig rmqConfig,
@@ -44,7 +54,7 @@ public class BrvsIrohaChainListener implements Closeable {
     Objects.requireNonNull(queryAPI, "Query API must not be null");
     Objects.requireNonNull(userKeyPair, "User Keypair must not be null");
 
-    irohaChainListener = new ReliableIrohaChainListener(rmqConfig, BRVS_QUEUE_RMQ_NAME);
+    irohaChainListener = new ReliableIrohaChainListener4J(rmqConfig, BRVS_QUEUE_RMQ_NAME, false);
     this.irohaAPI = queryAPI.getApi();
     this.brvsAccountId = queryAPI.getAccountId();
     this.brvsKeyPair = queryAPI.getKeyPair();
@@ -64,6 +74,7 @@ public class BrvsIrohaChainListener implements Closeable {
     accountsToMonitor.forEach(account ->
         pendingTransactions.addAll(getPendingTransactions(account, userKeyPair))
     );
+    logger.info("Got {} pending batches from Iroha", pendingTransactions.size());
     return pendingTransactions;
   }
 
@@ -75,12 +86,31 @@ public class BrvsIrohaChainListener implements Closeable {
    * @return list of user transactions that are in pending state
    */
   private List<TransactionBatch> getPendingTransactions(String accountId, KeyPair keyPair) {
-    queryAPIMap.putIfAbsent(accountId, new QueryAPI(irohaAPI, accountId, keyPair));
-    return constructBatches(
-        queryAPIMap.get(accountId)
+    return constructBatches(executeQueryFor(accountId, keyPair));
+  }
+
+  /**
+   * Returns a relevant query api instance
+   *
+   * @param accountId user that transactions should be queried for
+   * @param keyPair user keypair
+   * @return user pending transactions list
+   */
+  private List<Transaction> executeQueryFor(String accountId, KeyPair keyPair) {
+    final QueryResponse queryResponse = irohaAPI.query(
+        Query.builder(accountId, counter.getAndIncrement())
             .getPendingTransactions()
-            .getTransactionsList()
+            .buildSigned(keyPair)
     );
+
+    if (queryResponse.hasErrorResponse()) {
+      ErrorResponse errorResponse = queryResponse.getErrorResponse();
+      throw new ErrorResponseException(errorResponse);
+    }
+
+    return queryResponse
+        .getTransactionsResponse()
+        .getTransactionsList();
   }
 
   /**
@@ -90,27 +120,34 @@ public class BrvsIrohaChainListener implements Closeable {
    * @return {@link List} of {@link TransactionBatch} of input
    */
   private List<TransactionBatch> constructBatches(List<Transaction> transactions) {
-    List<TransactionBatch> transactionBatches = new ArrayList<>();
-    for (int i = 0; i < transactions.size(); ) {
+    final List<TransactionBatch> transactionBatches = new ArrayList<>();
+    // batch size for every transaction in the list
+    // used to shift through processed batch sublist
+    int batchSize;
+    for (int i = 0; i < transactions.size(); i += batchSize) {
       final List<Transaction> transactionListForBatch = new ArrayList<>();
       final int hashesCount = transactions
           .get(i)
           .getPayload()
           .getBatch()
           .getReducedHashesCount();
-      final int toInclude = hashesCount == 0 ? 1 : hashesCount;
+      batchSize = hashesCount == 0 ? 1 : hashesCount;
 
-      for (int j = 0; j < toInclude; j++) {
+      for (int j = 0; j < batchSize; j++) {
         transactionListForBatch.add(transactions.get(i + j));
       }
-      i += toInclude;
       transactionBatches.add(new TransactionBatch(transactionListForBatch));
     }
     return transactionBatches;
   }
 
-  public Observable<Block> getBlockStreaming() {
-    return irohaChainListener.getBlockObservable().get().map(Pair::getFirst);
+  /**
+   * Iroha blocks observable entrypoint
+   *
+   * @return {@link Observable} of {@link BlockSubscription}
+   */
+  public Observable<BlockSubscription> getBlockStreaming() {
+    return irohaChainListener.getBlockObservable();
   }
 
   public void listen() {
@@ -118,7 +155,7 @@ public class BrvsIrohaChainListener implements Closeable {
   }
 
   @Override
-  public void close() {
+  public void close() throws IOException {
     irohaChainListener.close();
   }
 }

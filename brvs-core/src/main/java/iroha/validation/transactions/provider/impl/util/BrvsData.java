@@ -1,10 +1,13 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.transactions.provider.impl.util;
 
+/**
+ * Simple pojo to be used as an service instance identity
+ */
 public class BrvsData {
 
   private String hexPubKey;

@@ -1,6 +1,6 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.rules.impl.billing;
@@ -16,9 +16,10 @@ import jp.co.soramitsu.iroha.java.detail.Const;
 
 public class BillingInfo {
 
-  private static final String ACCOUNT_ID_ATTRIBUTE = "accountId";
+  private static final String DOMAIN_ATTRIBUTE = "domain";
   private static final String BILLING_TYPE_ATTRIBUTE = "billingType";
   private static final String ASSET_ATTRIBUTE = "asset";
+  private static final String FEE_TYPE_ATTRIBUTE = "feeType";
   private static final String FEE_FRACTION_ATTRIBUTE = "feeFraction";
   private static final String CREATED_ATTRIBUTE = "created";
   private static final String UPDATED_ATTRIBUTE = "updated";
@@ -26,6 +27,7 @@ public class BillingInfo {
   private String domain;
   private BillingTypeEnum billingType;
   private String asset;
+  private FeeTypeEnum feeType;
   private BigDecimal feeFraction;
   private long updated;
 
@@ -33,6 +35,7 @@ public class BillingInfo {
       String domain,
       BillingTypeEnum billingType,
       String asset,
+      FeeTypeEnum feeType,
       BigDecimal feeFraction,
       long updated) {
 
@@ -43,11 +46,13 @@ public class BillingInfo {
     if (Strings.isNullOrEmpty(asset)) {
       throw new IllegalArgumentException("Asset must not be neither null nor empty");
     }
+    Objects.requireNonNull(feeType, "Fee type must not be null");
     Objects.requireNonNull(feeFraction, "Fee fraction must not be null");
 
     this.domain = domain;
     this.billingType = billingType;
     this.asset = asset;
+    this.feeType = feeType;
     this.feeFraction = feeFraction;
     this.updated = updated;
   }
@@ -82,6 +87,20 @@ public class BillingInfo {
     }
   }
 
+  public enum FeeTypeEnum {
+    FIXED,
+    FRACTION,
+    UNKNOWN;
+
+    /* default */ static FeeTypeEnum safeValueOf(String name) {
+      try {
+        return FeeTypeEnum.valueOf(name);
+      } catch (IllegalArgumentException e) {
+        return FeeTypeEnum.UNKNOWN;
+      }
+    }
+  }
+
   /* default */ static Set<BillingInfo> parseBillingHttpDto(String billingType,
       Map<String, Map<String, JsonObject>> domainsMap) {
 
@@ -94,6 +113,7 @@ public class BillingInfo {
                       domain,
                       BillingTypeEnum.valueOfLabel(billingType),
                       asset,
+                      FeeTypeEnum.safeValueOf(info.get(FEE_TYPE_ATTRIBUTE).getAsString()),
                       info.get(FEE_FRACTION_ATTRIBUTE).getAsBigDecimal(),
                       info.get(CREATED_ATTRIBUTE).getAsLong()
                   )
@@ -107,9 +127,10 @@ public class BillingInfo {
 
   /* default */ static BillingInfo parseBillingMqDto(JsonObject object) {
     return new BillingInfo(
-        getDomain(object.get(ACCOUNT_ID_ATTRIBUTE).getAsString()),
+        object.get(DOMAIN_ATTRIBUTE).getAsString(),
         BillingTypeEnum.valueOfLabel(object.get(BILLING_TYPE_ATTRIBUTE).getAsString()),
         object.get(ASSET_ATTRIBUTE).getAsString(),
+        FeeTypeEnum.safeValueOf(object.get(FEE_TYPE_ATTRIBUTE).getAsString()),
         object.get(FEE_FRACTION_ATTRIBUTE).getAsBigDecimal(),
         object.get(UPDATED_ATTRIBUTE).getAsLong()
     );
@@ -130,11 +151,11 @@ public class BillingInfo {
 
   @Override
   public boolean equals(Object other) {
+    if (other == null || !this.getClass().isAssignableFrom(other.getClass())) {
+      return false;
+    }
     if (other == this) {
       return true;
-    }
-    if (!this.getClass().isAssignableFrom(other.getClass())) {
-      return false;
     }
     BillingInfo otherObj = (BillingInfo) other;
     return otherObj.asset.equals(this.asset)
@@ -147,6 +168,7 @@ public class BillingInfo {
     return "Domain=" + domain +
         ";Type=" + billingType.name() +
         ";Asset=" + asset +
+        ";FeeType=" + feeType.name() +
         ";FeeFraction=" + feeFraction.toPlainString() +
         ";Updated=" + updated;
   }
@@ -161,6 +183,10 @@ public class BillingInfo {
 
   /* default */ String getAsset() {
     return asset;
+  }
+
+  /* default */ FeeTypeEnum getFeeType() {
+    return feeType;
   }
 
   /* default */ BigDecimal getFeeFraction() {

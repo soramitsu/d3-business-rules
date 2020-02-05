@@ -1,15 +1,18 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation;
 
+import iroha.validation.filter.CrossDomainFilter;
 import iroha.validation.service.ValidationService;
 import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.provider.impl.util.CacheProvider;
 import iroha.validation.transactions.storage.TransactionVerdictStorage;
+import java.net.PortUnreachableException;
 import java.net.URI;
+import java.security.KeyPair;
 import java.util.logging.LogManager;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
 import org.glassfish.hk2.utilities.binding.AbstractBinder;
@@ -57,12 +60,14 @@ public class Application {
         bind(context.getBean(RegistrationProvider.class)).to(RegistrationProvider.class);
         bind(context.getBean(IrohaAPI.class)).to(IrohaAPI.class);
         bind(context.getBean(CacheProvider.class)).to(CacheProvider.class);
+        bind(context.getBean("brvsAccountKeyPair", KeyPair.class)).to(KeyPair.class);
       }
     });
+    resourceConfig.register(new CrossDomainFilter());
     resourceConfig.property(ServerProperties.OUTBOUND_CONTENT_LENGTH_BUFFER, 0);
 
     int port = getPort(context);
-    logger.info("Going to establish HTTP server on port " + port);
+    logger.info("Going to establish HTTP server on port {}", port);
     GrizzlyHttpServerFactory
         .createHttpServer(URI.create(String.format(BASE_URI_FORMAT, port)), resourceConfig);
   }
@@ -72,10 +77,10 @@ public class Application {
     try {
       portBean = Integer.parseInt(context.getBean(BRVS_PORT_BEAN_NAME, String.class));
       if (portBean < 0 || portBean > 65535) {
-        throw new Exception("Got port out of range: " + portBean);
+        throw new PortUnreachableException("Got port out of range: " + portBean);
       }
-    } catch (Exception e) {
-      logger.warn("Couldn't read the port. Reason: " + e.getMessage());
+    } catch (PortUnreachableException e) {
+      logger.warn("Couldn't read the port. Reason: {}", e.getMessage());
     }
     return portBean;
   }

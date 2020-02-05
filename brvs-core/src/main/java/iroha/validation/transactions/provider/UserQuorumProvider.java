@@ -1,9 +1,11 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.transactions.provider;
+
+import java.util.Set;
 
 public interface UserQuorumProvider {
 
@@ -11,27 +13,32 @@ public interface UserQuorumProvider {
    * Method for getting relevant user related keypairs contained in users quorum
    *
    * @param targetAccount account id in Iroha
-   * @return user quorum
+   * @return user signatories (public keys)
    */
-  int getUserQuorumDetail(String targetAccount);
+  Set<String> getUserSignatoriesDetail(String targetAccount);
 
   /**
    * Method for setting relevant user related keypairs contained in users quorum
    *
    * @param targetAccount account id in Iroha
-   * @param quorum user quorum to be set
-   * @param creationTimeMillis time to synchronize operation
+   * @param publicKeys user public keys to be set
    */
-  void setUserQuorumDetail(String targetAccount, int quorum, long creationTimeMillis);
+  void setUserQuorumDetail(String targetAccount,
+      Iterable<String> publicKeys);
+
+  /**
+   * Method for getting relevant user Iroha account quorum
+   *
+   * @param targetAccount account id in Iroha
+   */
+  int getUserAccountQuorum(String targetAccount);
 
   /**
    * Method for setting relevant user Iroha account quorum
-   *
-   * @param targetAccount account id in Iroha
+   *  @param targetAccount account id in Iroha
    * @param quorum account quorum to be set
-   * @param creationTimeMillis time to synchronize operation
    */
-  void setUserAccountQuorum(String targetAccount, int quorum, long creationTimeMillis);
+  void setUserAccountQuorum(String targetAccount, int quorum);
 
   /**
    * Method for getting relevant account quorum with respect to brvs instaces count

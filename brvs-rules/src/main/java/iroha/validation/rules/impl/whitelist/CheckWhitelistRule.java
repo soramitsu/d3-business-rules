@@ -1,6 +1,6 @@
 /*
- * Copyright D3 Ledger, Inc. All Rights Reserved.
- *  SPDX-License-Identifier: Apache-2.0
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package iroha.validation.rules.impl.whitelist;
@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 public class CheckWhitelistRule implements Rule {
 
   private static final Logger logger = LoggerFactory.getLogger(UpdateWhitelistRule.class);
+  private static final String WITHDRAWAL_FEE_DESCRIPTION = "withdrawal fee";
 
   private final QueryAPI queryAPI;
   private final String withdrawalAccount;
@@ -76,11 +77,11 @@ public class CheckWhitelistRule implements Rule {
     for (TransferAsset transfer : transfers) {
       try {
         String asset = transfer.getAssetId();
-        if (exceptionAssets.contains(asset)) {
+        String address = transfer.getDescription();
+        if (exceptionAssets.contains(asset) || address.equals(WITHDRAWAL_FEE_DESCRIPTION)) {
           continue;
         }
         String clientId = transfer.getSrcAccountId();
-        String address = transfer.getDescription();
         String assetDomain = WhitelistUtils.getAssetDomain(asset);
 
         String whitelistKey = WhitelistUtils.assetToWhitelistKey.get(assetDomain);
