@@ -164,10 +164,7 @@ public class BasicTransactionProvider implements TransactionProvider {
     if (transactionVerdict == null) {
       return false;
     }
-    final Verdict status = transactionVerdict.getStatus();
-    return Verdict.VALIDATED.equals(status) ||
-        Verdict.REJECTED.equals(status) ||
-        Verdict.FAILED.equals(status);
+    return Verdict.checkIfVerdictIsTerminate(transactionVerdict.getStatus());
   }
 
   private void processRejectedTransactions(Scheduler scheduler) {
