@@ -115,7 +115,7 @@ public class BasicTransactionProvider implements TransactionProvider {
           .forEach(transactionBatch -> {
                 // if only BRVS signatory remains
                 if (isBatchSignedByUsers(transactionBatch, accounts)) {
-                  if (saveMissingInStorage(transactionBatch)) {
+                  if (savedMissingInStorage(transactionBatch)) {
                     cacheProvider.put(transactionBatch);
                   }
                 }
@@ -148,7 +148,7 @@ public class BasicTransactionProvider implements TransactionProvider {
     return signatoriesToPresent;
   }
 
-  private boolean saveMissingInStorage(TransactionBatch transactionBatch) {
+  private boolean savedMissingInStorage(TransactionBatch transactionBatch) {
     return transactionBatch
         .stream()
         .map(ValidationUtils::hexHash)
