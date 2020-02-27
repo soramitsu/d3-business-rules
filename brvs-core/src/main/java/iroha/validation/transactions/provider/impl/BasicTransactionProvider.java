@@ -23,9 +23,10 @@ import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.provider.TransactionProvider;
 import iroha.validation.transactions.provider.UserQuorumProvider;
 import iroha.validation.transactions.provider.impl.util.CacheProvider;
-import iroha.validation.transactions.storage.BlockStorage;
 import iroha.validation.transactions.storage.TransactionVerdictStorage;
 import iroha.validation.utils.ValidationUtils;
+import iroha.validation.verdict.ValidationResult;
+import iroha.validation.verdict.Verdict;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -114,8 +115,9 @@ public class BasicTransactionProvider implements TransactionProvider {
           .forEach(transactionBatch -> {
                 // if only BRVS signatory remains
                 if (isBatchSignedByUsers(transactionBatch, accounts)) {
-                  saveMissingInStorage(transactionBatch);
-                  cacheProvider.put(transactionBatch);
+                  if (saveMissingInStorage(transactionBatch)) {
+                    cacheProvider.put(transactionBatch);
+                  }
                 }
               }
           );
@@ -150,10 +152,22 @@ public class BasicTransactionProvider implements TransactionProvider {
     return transactionBatch
         .stream()
         .map(ValidationUtils::hexHash)
-        .filter(hash -> !transactionVerdictStorage.isHashPresentInStorage(hash))
+        .filter(hash -> !checkIfBatchStatusTerminate(hash))
         .map(transactionVerdictStorage::markTransactionPending)
         .findAny()
         .orElse(false);
+  }
+
+  private boolean checkIfBatchStatusTerminate(String hash) {
+    final ValidationResult transactionVerdict = transactionVerdictStorage
+        .getTransactionVerdict(hash);
+    if (transactionVerdict == null) {
+      return false;
+    }
+    final Verdict status = transactionVerdict.getStatus();
+    return Verdict.VALIDATED.equals(status) ||
+        Verdict.REJECTED.equals(status) ||
+        Verdict.FAILED.equals(status);
   }
 
   private void processRejectedTransactions(Scheduler scheduler) {
