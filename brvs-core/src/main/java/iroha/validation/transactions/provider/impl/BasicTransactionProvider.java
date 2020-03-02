@@ -15,7 +15,6 @@ import io.reactivex.Observable;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 import iroha.protocol.BlockOuterClass.Block;
-import iroha.protocol.Commands.AddSignatory;
 import iroha.protocol.Commands.Command;
 import iroha.protocol.Commands.RemoveSignatory;
 import iroha.protocol.TransactionOuterClass.Transaction;
@@ -25,13 +24,17 @@ import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.provider.TransactionProvider;
 import iroha.validation.transactions.provider.UserQuorumProvider;
 import iroha.validation.transactions.provider.impl.util.CacheProvider;
-import iroha.validation.transactions.storage.BlockStorage;
 import iroha.validation.transactions.storage.TransactionVerdictStorage;
 import iroha.validation.utils.ValidationUtils;
+import iroha.validation.verdict.ValidationResult;
+import iroha.validation.verdict.Verdict;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -51,7 +54,6 @@ public class BasicTransactionProvider implements TransactionProvider {
   private final CacheProvider cacheProvider;
   private final UserQuorumProvider userQuorumProvider;
   private final RegistrationProvider registrationProvider;
-  private final BlockStorage blockStorage;
   private final BrvsIrohaChainListener irohaReliableChainListener;
   private final ScheduledExecutorService executor = createPrettyScheduledThreadPool(
       "brvs", "pending-processor"
@@ -70,7 +72,6 @@ public class BasicTransactionProvider implements TransactionProvider {
       CacheProvider cacheProvider,
       UserQuorumProvider userQuorumProvider,
       RegistrationProvider registrationProvider,
-      BlockStorage blockStorage,
       BrvsIrohaChainListener irohaReliableChainListener,
       String userDomains
   ) {
@@ -88,7 +89,6 @@ public class BasicTransactionProvider implements TransactionProvider {
     this.cacheProvider = cacheProvider;
     this.userQuorumProvider = userQuorumProvider;
     this.registrationProvider = registrationProvider;
-    this.blockStorage = blockStorage;
     this.irohaReliableChainListener = irohaReliableChainListener;
     this.userDomains = Arrays.stream(userDomains.split(",")).collect(Collectors.toSet());
   }
@@ -115,9 +115,10 @@ public class BasicTransactionProvider implements TransactionProvider {
           .getAllPendingTransactions(accounts)
           .forEach(transactionBatch -> {
                 // if only BRVS signatory remains
-                if (isBatchSignedByUsers(transactionBatch, accounts) &&
-                    savedMissingInStorage(transactionBatch)) {
-                  cacheProvider.put(transactionBatch);
+                if (isBatchSignedByUsers(transactionBatch, accounts)) {
+                  if (savedMissingInStorage(transactionBatch)) {
+                    cacheProvider.put(transactionBatch);
+                  }
                 }
               }
           );
@@ -149,15 +150,22 @@ public class BasicTransactionProvider implements TransactionProvider {
   }
 
   private boolean savedMissingInStorage(TransactionBatch transactionBatch) {
-    boolean result = false;
-    for (Transaction transaction : transactionBatch) {
-      final String hex = ValidationUtils.hexHash(transaction);
-      if (!transactionVerdictStorage.isHashPresentInStorage(hex)) {
-        transactionVerdictStorage.markTransactionPending(hex);
-        result = true;
-      }
+    return transactionBatch
+        .stream()
+        .map(ValidationUtils::hexHash)
+        .filter(hash -> !checkIfBatchStatusTerminate(hash))
+        .map(transactionVerdictStorage::markTransactionPending)
+        .findAny()
+        .orElse(false);
+  }
+
+  private boolean checkIfBatchStatusTerminate(String hash) {
+    final ValidationResult transactionVerdict = transactionVerdictStorage
+        .getTransactionVerdict(hash);
+    if (transactionVerdict == null) {
+      return false;
     }
-    return result;
+    return Verdict.checkIfVerdictIsTerminate(transactionVerdict.getStatus());
   }
 
   private void processRejectedTransactions(Scheduler scheduler) {
@@ -173,7 +181,6 @@ public class BasicTransactionProvider implements TransactionProvider {
               try {
                 // Store new block first
                 final Block block = blockSubscription.getBlock();
-                blockStorage.store(block);
                 processCommitted(
                     block
                         .getBlockV1()
@@ -213,7 +220,8 @@ public class BasicTransactionProvider implements TransactionProvider {
       return;
     }
 
-    if (!registrationProvider.getRegisteredAccounts().contains(creatorAccountId)) {
+    final Set<String> registeredAccounts = registrationProvider.getRegisteredAccounts();
+    if (!registeredAccounts.contains(creatorAccountId)) {
       return;
     }
 
@@ -222,41 +230,92 @@ public class BasicTransactionProvider implements TransactionProvider {
         .getReducedPayload()
         .getCommandsList();
 
-    final Set<String> addedSignatories = commands
-        .stream()
-        .filter(Command::hasAddSignatory)
-        .map(Command::getAddSignatory)
-        .filter(command -> command.getAccountId().equals(creatorAccountId))
-        .map(AddSignatory::getPublicKey)
-        .map(String::toUpperCase)
-        .collect(Collectors.toSet());
-    final Set<String> removedSignatories = commands
+    modifyUserQuorum(commands, registeredAccounts);
+  }
+
+  private void modifyUserQuorum(Collection<Command> commands, Set<String> registeredAccounts) {
+
+    final Map<String, Set<String>> accountRemovedSignatories = constructRemovedSignatoriesByAccountId(
+        commands,
+        registeredAccounts
+    );
+
+    final Map<String, Set<String>> accountAddedSignatories = constructAddedSignatoriesByAccountId(
+        commands,
+        registeredAccounts
+    );
+
+    if (accountAddedSignatories.isEmpty() && accountRemovedSignatories.isEmpty()) {
+      return;
+    }
+
+    final Set<String> accountsKeysSet = new HashSet<>(accountAddedSignatories.keySet());
+    accountsKeysSet.addAll(accountRemovedSignatories.keySet());
+
+    for (final String accountId : accountsKeysSet) {
+      final Set<String> userSignatories = new HashSet<>(
+          userQuorumProvider.getUserSignatoriesDetail(accountId)
+      );
+      final Set<String> removedSignatories = accountRemovedSignatories.get(accountId);
+      final Set<String> addedSignatories = accountAddedSignatories.get(accountId);
+      if (removedSignatories != null) {
+        userSignatories.removeAll(removedSignatories);
+      }
+      if (addedSignatories != null) {
+        userSignatories.addAll(addedSignatories);
+      }
+      if (userSignatories.isEmpty()) {
+        logger.warn("There was an attempt to delete all keys of {}", accountId);
+        return;
+      }
+      logger.info("Going to modify account {} quorum", accountId);
+      userQuorumProvider.setUserQuorumDetail(accountId, userSignatories);
+      userQuorumProvider.setUserAccountQuorum(accountId,
+          userQuorumProvider.getValidQuorumForUserAccount(accountId)
+      );
+    }
+  }
+
+  private Map<String, Set<String>> constructRemovedSignatoriesByAccountId(
+      Collection<Command> commands,
+      Set<String> registeredAccounts) {
+    final Map<String, Set<String>> accountRemovedSignatories = new HashMap<>();
+
+    commands
         .stream()
         .filter(Command::hasRemoveSignatory)
         .map(Command::getRemoveSignatory)
-        .filter(command -> command.getAccountId().equals(creatorAccountId))
-        .map(RemoveSignatory::getPublicKey)
-        .map(String::toUpperCase)
-        .collect(Collectors.toSet());
+        .filter(command -> registeredAccounts.contains(command.getAccountId()))
+        .forEach(removeSignatory -> {
+          final String signatoryAccountId = removeSignatory.getAccountId();
+          if (!accountRemovedSignatories.containsKey(signatoryAccountId)) {
+            accountRemovedSignatories.put(signatoryAccountId, new HashSet<>());
+          }
+          accountRemovedSignatories.get(signatoryAccountId)
+              .add(removeSignatory.getPublicKey().toUpperCase());
+        });
+    return accountRemovedSignatories;
+  }
 
-    if (addedSignatories.isEmpty() && removedSignatories.isEmpty()) {
-      return;
-    }
+  private Map<String, Set<String>> constructAddedSignatoriesByAccountId(
+      Collection<Command> commands,
+      Set<String> registeredAccounts) {
+    final Map<String, Set<String>> accountAddedSignatories = new HashMap<>();
 
-    final Set<String> userSignatories = new HashSet<>(
-        userQuorumProvider.getUserSignatoriesDetail(creatorAccountId)
-    );
-    userSignatories.removeAll(removedSignatories);
-    userSignatories.addAll(addedSignatories);
-    if (userSignatories.isEmpty()) {
-      logger.warn("User {} tried to delete all their keys", creatorAccountId);
-      return;
-    }
-    logger.info("Going to modify account {} quorum", creatorAccountId);
-    userQuorumProvider.setUserQuorumDetail(creatorAccountId, userSignatories);
-    userQuorumProvider.setUserAccountQuorum(creatorAccountId,
-        userQuorumProvider.getValidQuorumForUserAccount(creatorAccountId)
-    );
+    commands
+        .stream()
+        .filter(Command::hasAddSignatory)
+        .map(Command::getAddSignatory)
+        .filter(command -> registeredAccounts.contains(command.getAccountId()))
+        .forEach(addSignatory -> {
+          final String signatoryAccountId = addSignatory.getAccountId();
+          if (!accountAddedSignatories.containsKey(signatoryAccountId)) {
+            accountAddedSignatories.put(signatoryAccountId, new HashSet<>());
+          }
+          accountAddedSignatories.get(signatoryAccountId)
+              .add(addSignatory.getPublicKey().toUpperCase());
+        });
+    return accountAddedSignatories;
   }
 
   private void registerCreatedAccountByTransactionScanning(Transaction blockTransaction)
