@@ -25,7 +25,7 @@ wrapper {
 allprojects {
     sonarqube {
         properties {
-            property "sonar.github.repository", "soramitsu/business-rules"
+            property "sonar.github.repository", "soramitsu/d3-business-rules"
             property "sonar.projectKey", "soranet:business-rules"
             property "sonar.java.binaries", "${project.projectDir}/build/classes"
             property "sonar.java.libraries", "${project.projectDir}/build/libs"
