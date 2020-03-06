@@ -12,7 +12,7 @@ import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.Provider;
 
 @Provider
-public class BrvsExceptionHandler extends Exception implements ExceptionMapper<BrvsException> {
+public class BrvsExceptionHandler implements ExceptionMapper<BrvsException> {
 
   @Override
   public Response toResponse(BrvsException exception) {

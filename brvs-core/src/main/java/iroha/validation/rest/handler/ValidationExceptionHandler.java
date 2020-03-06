@@ -14,8 +14,7 @@ import javax.ws.rs.ext.Provider;
 import jp.co.soramitsu.iroha.java.ValidationException;
 
 @Provider
-public class ValidationExceptionHandler extends Exception
-    implements ExceptionMapper<ValidationException> {
+public class ValidationExceptionHandler implements ExceptionMapper<ValidationException> {
 
   @Override
   public Response toResponse(ValidationException exception) {
