@@ -147,17 +147,17 @@
     <constructor-arg name="queryAPI" ref="queryAPI"/>
     <constructor-arg name="amount" value="${MIN_SIGNATORIES_RULE_AMOUNT}"/>
   </bean>
-<!--  <bean id="billingRule" class="iroha.validation.rules.impl.billing.BillingRule">-->
-<!--    <constructor-arg name="getBillingBaseURL" value="${BILLING_URL}"/>-->
-<!--    <constructor-arg name="rmqHost" value="${rmq.host}"/>-->
-<!--    <constructor-arg name="rmqPort" value="${rmq.port}"/>-->
-<!--    <constructor-arg name="rmqExchange" value="${BILLING_RMQ_EXCHANGE}"/>-->
-<!--    <constructor-arg name="rmqRoutingKey" value="${BILLING_RMQ_ROUTINGKEY}"/>-->
-<!--    <constructor-arg name="userDomains" value="${BRVS_USERDOMAINS}"/>-->
-<!--    <constructor-arg name="depositAccounts" value="${BILLING_DEPOSITACCOUNTS}"/>-->
-<!--    <constructor-arg name="ethWithdrawalAccount" value="${BILLING_ETHWITHDRAWALACCOUNT}"/>-->
-<!--    <constructor-arg name="btcWithdrawalAccount" value="${BILLING_BTCWITHDRAWALACCOUNT}"/>-->
-<!--  </bean>-->
+  <bean id="billingRule" class="iroha.validation.rules.impl.billing.BillingRule">
+    <constructor-arg name="getBillingBaseURL" value="${BILLING_URL}"/>
+    <constructor-arg name="rmqHost" value="${rmq.host}"/>
+    <constructor-arg name="rmqPort" value="${rmq.port}"/>
+    <constructor-arg name="rmqExchange" value="${BILLING_RMQ_EXCHANGE}"/>
+    <constructor-arg name="rmqRoutingKey" value="${BILLING_RMQ_ROUTINGKEY}"/>
+    <constructor-arg name="userDomains" value="${BRVS_USERDOMAINS}"/>
+    <constructor-arg name="depositAccounts" value="${BILLING_DEPOSITACCOUNTS}"/>
+    <constructor-arg name="ethWithdrawalAccount" value="${BILLING_ETHWITHDRAWALACCOUNT}"/>
+    <constructor-arg name="btcWithdrawalAccount" value="${BILLING_BTCWITHDRAWALACCOUNT}"/>
+  </bean>
   <bean id="quorumBanRule" class="iroha.validation.rules.impl.core.NoQuorumModificationsRule"/>
   <bean id="byaccoDomainInternalJpyRule" class="iroha.validation.rules.impl.byacco.ByaccoDomainInternalAssetRule">
     <constructor-arg name="assetId" value="${BYACCO_DOMAIN_INTERNAL_ASSET_ID}"/>
@@ -166,7 +166,7 @@
   <util:map id="rules" map-class="java.util.HashMap">
     <entry key="restrictedKeysRule" value-ref="restrictedKeysRule"/>
     <entry key="minKeysRule" value-ref="minKeysRule"/>
-<!--    <entry key="billingRule" value-ref="billingRule"/>-->
+    <entry key="billingRule" value-ref="billingRule"/>
     <entry key="quorumBanRule" value-ref="quorumBanRule"/>
     <entry key="byaccoDomainInternalJpyRule" value-ref="byaccoDomainInternalJpyRule"/>
     <!-- More can be added -->
