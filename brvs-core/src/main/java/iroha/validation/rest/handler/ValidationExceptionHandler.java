@@ -19,7 +19,11 @@ public class ValidationExceptionHandler extends Exception
 
   @Override
   public Response toResponse(ValidationException exception) {
-    return Response.ok(new GenericStatusedResponse(FIELD_VALIDATION_ERROR, exception.getMessage()))
-        .build();
+    return Response.ok(
+        new GenericStatusedResponse(
+            FIELD_VALIDATION_ERROR,
+            exception.getMessage()
+        )
+    ).build();
   }
 }
