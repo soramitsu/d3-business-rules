@@ -7,6 +7,7 @@ package iroha.validation.rest;
 
 import static iroha.validation.exception.BrvsErrorCode.MALFORMED_QUERY;
 import static iroha.validation.exception.BrvsErrorCode.MALFORMED_TRANSACTION;
+import static iroha.validation.exception.BrvsErrorCode.REGISTRATION_FAILED;
 import static iroha.validation.utils.ValidationUtils.derivePublicKey;
 import static iroha.validation.utils.ValidationUtils.fieldValidator;
 import static iroha.validation.utils.ValidationUtils.subscriptionStrategy;
@@ -66,7 +67,7 @@ public class RestService {
   @FunctionalInterface
   public interface CheckedFunction<T, R> {
 
-    R apply(T t) throws Exception;
+    R apply(T t) throws InvalidProtocolBufferException;
   }
 
   private static final Logger logger = LoggerFactory.getLogger(RestService.class);
@@ -114,7 +115,7 @@ public class RestService {
     try {
       registrationProvider.register(accountId);
     } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+      throw new BrvsException(e.getMessage(), e, REGISTRATION_FAILED);
     }
     return Response.ok(GenericStatusedResponse.SUCCESS).build();
   }
@@ -131,8 +132,7 @@ public class RestService {
     final boolean isRegistered = registrationProvider.getRegisteredAccounts()
         .stream()
         .anyMatch(registeredAccount -> registeredAccount.equals(accountId));
-    return Response.ok(ValidationUtils.gson.toJson(new AccountRegisteredResponse(isRegistered)))
-        .build();
+    return Response.ok(new AccountRegisteredResponse(isRegistered)).build();
   }
 
   @POST
@@ -333,8 +333,6 @@ public class RestService {
           .build();
     } catch (InvalidProtocolBufferException | IllegalArgumentException e) {
       throw new BrvsException(e.getMessage(), e, MALFORMED_QUERY);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 
@@ -497,8 +495,6 @@ public class RestService {
     } catch (InvalidProtocolBufferException | IllegalArgumentException e) {
       logger.error("Error during transaction processing", e);
       throw new BrvsException(e.getMessage(), e, MALFORMED_TRANSACTION);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 
