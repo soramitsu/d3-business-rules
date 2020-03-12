@@ -14,7 +14,6 @@ import static iroha.validation.utils.ValidationUtils.subscriptionStrategy;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
-import com.google.gson.Gson;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.google.protobuf.util.JsonFormat.Parser;
@@ -75,7 +74,6 @@ public class RestService {
       .omittingInsignificantWhitespace()
       .preservingProtoFieldNames();
   private static final Parser parser = JsonFormat.parser().ignoringUnknownFields();
-  private static final Gson gson = new Gson();
 
   @Inject
   private RegistrationProvider registrationProvider;
@@ -391,7 +389,7 @@ public class RestService {
    * @return bytes of proto transaction
    */
   private byte[] decode(String hexString) {
-    BinaryTransaction bt = gson.fromJson(hexString, BinaryTransaction.class);
+    BinaryTransaction bt = ValidationUtils.gson.fromJson(hexString, BinaryTransaction.class);
     return Hex.decode(bt.hexString);
   }
 
