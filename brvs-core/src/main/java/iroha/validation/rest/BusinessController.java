@@ -54,8 +54,8 @@ import org.slf4j.LoggerFactory;
 import org.spongycastle.util.encoders.Hex;
 
 @Singleton
-@Path("")
-public class RestService {
+@Path("/v1")
+public class BusinessController {
 
   /**
    * Lambda function interface with unhandled exception
@@ -69,7 +69,7 @@ public class RestService {
     R apply(T t) throws InvalidProtocolBufferException;
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(RestService.class);
+  private static final Logger logger = LoggerFactory.getLogger(BusinessController.class);
   private static final Printer printer = JsonFormat.printer()
       .omittingInsignificantWhitespace()
       .preservingProtoFieldNames();
@@ -87,13 +87,6 @@ public class RestService {
    */
   @Inject
   private KeyPair brvsAccountKeyPair;
-
-  @GET
-  @Path("/actuator/health")
-  @Produces(MediaType.APPLICATION_JSON)
-  public Response isHealthy() {
-    return Response.ok("{\"status\":\"UP\"}").build();
-  }
 
   @GET
   @Path("/status/{txHash}")
