@@ -42,7 +42,8 @@ public class SoraDistributionPluggableLogic
   private static final Logger logger = LoggerFactory
       .getLogger(SoraDistributionPluggableLogic.class);
   private static final String COMMA_SPACES_REGEX = ",\\s*";
-  private static final String PROPORTIONS_VALUE_KEY = "distribution";
+  private static final String DISTRIBUTION_PROPORTIONS_KEY = "distribution";
+  private static final String DISTRIBUTION_FINISHED_KEY = "distribution_finished";
   private static final String XOR_ASSET_ID = "xor#sora";
   private static final MathContext XOR_MATH_CONTEXT = new MathContext(18, RoundingMode.DOWN);
   private static final int TRANSACTION_SIZE = 9999;
@@ -124,14 +125,19 @@ public class SoraDistributionPluggableLogic
     final List<Transaction> transactionList = new ArrayList<>();
     transferAssetMap.forEach((projectOwnerAccountId, transferAmount) -> {
       logger.info("Triggered distributions for {}", projectOwnerAccountId);
+      final SoraDistributionFinished distributionFinished = queryDistributionsFinishedForAccount(
+          projectOwnerAccountId
+      );
+      if (distributionFinished != null
+          && distributionFinished.finished != null
+          && distributionFinished.finished) {
+        logger.info("No need to perform any more distributions for {}", projectOwnerAccountId);
+        return;
+      }
       SoraDistributionProportions suppliesLeft = queryProportionsForAccount(
           projectOwnerAccountId,
           brvsAccountId
       );
-      if (suppliesLeft != null && suppliesLeft.finished != null && suppliesLeft.finished) {
-        logger.info("No need to perform any more distributions for {}", projectOwnerAccountId);
-        return;
-      }
       final SoraDistributionProportions initialProportions = queryProportionsForAccount(
           projectOwnerAccountId
       );
@@ -198,21 +204,25 @@ public class SoraDistributionPluggableLogic
       Map<String, BigDecimal> toDistributeMap) {
     int commandCounter = 0;
     final List<Transaction> transactionList = new ArrayList<>();
-    final SoraDistributionProportions afterDistribution = calculateSuppliesLeftAfterDistribution(
-        transferAmount,
+    final SoraDistributionProportions afterDistribution = getSuppliesLeftAfterDistributions(
         supplies,
+        transferAmount,
         toDistributeMap
+    );
+    final SoraDistributionFinished soraDistributionFinished = new SoraDistributionFinished(
+        afterDistribution.totalSupply.signum() == 0
     );
     transactionList.add(
         constructDetailTransaction(
             projectOwnerAccountId,
-            afterDistribution
+            afterDistribution,
+            soraDistributionFinished
         )
     );
     TransactionBuilder transactionBuilder = jp.co.soramitsu.iroha.java.Transaction
         .builder(brvsAccountId);
     // In case it is going to finish, add all amount left
-    if (afterDistribution.finished) {
+    if (soraDistributionFinished.finished) {
       afterDistribution.accountProportions.forEach((account, amount) ->
           toDistributeMap.merge(account, toDistributeMap.get(account), BigDecimal::add)
       );
@@ -262,31 +272,23 @@ public class SoraDistributionPluggableLogic
     );
   }
 
-  private SoraDistributionProportions calculateSuppliesLeftAfterDistribution(
-      BigDecimal transferAmount,
-      SoraDistributionProportions supplies,
-      Map<String, BigDecimal> toDistributeMap) {
-    final SoraDistributionProportions suppliesLeftAfterDistributions = getSuppliesLeftAfterDistributions(
-        supplies,
-        transferAmount,
-        toDistributeMap
-    );
-    logger.debug(
-        "Constructed supply detail transaction with status {}",
-        suppliesLeftAfterDistributions.finished
-    );
-    return suppliesLeftAfterDistributions;
-  }
-
   private Transaction constructDetailTransaction(
       String projectOwnerAccountId,
-      SoraDistributionProportions suppliesLeftAfterDistributions) {
+      SoraDistributionProportions suppliesLeftAfterDistributions,
+      SoraDistributionFinished soraDistributionFinished) {
     return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId)
         .setAccountDetail(
             projectOwnerAccountId,
-            PROPORTIONS_VALUE_KEY,
+            DISTRIBUTION_PROPORTIONS_KEY,
             Utils.irohaEscape(
                 ValidationUtils.gson.toJson(suppliesLeftAfterDistributions)
+            )
+        )
+        .setAccountDetail(
+            projectOwnerAccountId,
+            DISTRIBUTION_FINISHED_KEY,
+            Utils.irohaEscape(
+                ValidationUtils.gson.toJson(soraDistributionFinished)
             )
         )
         .sign(brvsKeypair)
@@ -317,8 +319,7 @@ public class SoraDistributionPluggableLogic
         supplyWithdrawn.signum() == -1 ? BigDecimal.ZERO : supplyWithdrawn;
     return new SoraDistributionProportions(
         resultingSuppliesMap,
-        supplyLeft,
-        supplyLeft.signum() == 0
+        supplyLeft
     );
   }
 
@@ -342,9 +343,7 @@ public class SoraDistributionPluggableLogic
 
     return new SoraDistributionProportions(
         decimalMap,
-        totalSupply,
-        decimalMap.values().stream()
-            .allMatch(value -> value.signum() == 0)
+        totalSupply
     );
   }
 
@@ -371,10 +370,23 @@ public class SoraDistributionPluggableLogic
             queryAPI.getAccountDetails(
                 accountId,
                 setterAccountId,
-                PROPORTIONS_VALUE_KEY
+                DISTRIBUTION_PROPORTIONS_KEY
             )
         ),
         SoraDistributionProportions.class
+    );
+  }
+
+  private SoraDistributionFinished queryDistributionsFinishedForAccount(String accountId) {
+    return ValidationUtils.gson.fromJson(
+        Utils.irohaUnEscape(
+            queryAPI.getAccountDetails(
+                accountId,
+                brvsAccountId,
+                DISTRIBUTION_FINISHED_KEY
+            )
+        ),
+        SoraDistributionFinished.class
     );
   }
 
@@ -384,14 +396,20 @@ public class SoraDistributionPluggableLogic
     // Account -> left in absolute measure from BRVS
     protected Map<String, BigDecimal> accountProportions;
     protected BigDecimal totalSupply;
-    protected Boolean finished;
 
     public SoraDistributionProportions(
         Map<String, BigDecimal> accountProportions,
-        BigDecimal totalSupply,
-        Boolean finished) {
+        BigDecimal totalSupply) {
       this.accountProportions = accountProportions;
       this.totalSupply = totalSupply;
+    }
+  }
+
+  public static class SoraDistributionFinished {
+
+    protected Boolean finished;
+
+    public SoraDistributionFinished(Boolean finished) {
       this.finished = finished;
     }
   }
