@@ -39,7 +39,8 @@ import org.springframework.util.StringUtils;
 public class SoraDistributionPluggableLogic
     extends PluggableLogic<Transaction, Map<String, BigDecimal>> {
 
-  private static final Logger logger = LoggerFactory.getLogger(SoraDistributionPluggableLogic.class);
+  private static final Logger logger = LoggerFactory
+      .getLogger(SoraDistributionPluggableLogic.class);
   private static final String COMMA_SPACES_REGEX = ",\\s*";
   private static final String PROPORTIONS_VALUE_KEY = "distribution";
   private static final String XOR_ASSET_ID = "xor#sora";
@@ -158,6 +159,7 @@ public class SoraDistributionPluggableLogic
       transactionList.addAll(
           constructTransactions(
               projectOwnerAccountId,
+              transferAmount,
               finalSuppliesLeft,
               toDistributeMap
           )
@@ -191,21 +193,33 @@ public class SoraDistributionPluggableLogic
 
   private List<Transaction> constructTransactions(
       String projectOwnerAccountId,
+      BigDecimal transferAmount,
       SoraDistributionProportions supplies,
       Map<String, BigDecimal> toDistributeMap) {
     int commandCounter = 0;
     final List<Transaction> transactionList = new ArrayList<>();
+    final SoraDistributionProportions afterDistribution = calculateSuppliesLeftAfterDistribution(
+        transferAmount,
+        supplies,
+        toDistributeMap
+    );
     transactionList.add(
         constructDetailTransaction(
             projectOwnerAccountId,
-            supplies,
-            toDistributeMap)
+            afterDistribution
+        )
     );
     TransactionBuilder transactionBuilder = jp.co.soramitsu.iroha.java.Transaction
         .builder(brvsAccountId);
+    // In case it is going to finish, add all amount left
+    if (afterDistribution.finished) {
+      afterDistribution.accountProportions.forEach((account, amount) ->
+          toDistributeMap.merge(account, toDistributeMap.get(account), BigDecimal::add)
+      );
+    }
     for (Map.Entry<String, BigDecimal> entry : toDistributeMap.entrySet()) {
       final BigDecimal amount = entry.getValue();
-      if (amount.compareTo(BigDecimal.ZERO) > 0) {
+      if (amount.signum() == 1) {
         appendDistributionCommand(
             projectOwnerAccountId,
             entry.getKey(),
@@ -248,18 +262,25 @@ public class SoraDistributionPluggableLogic
     );
   }
 
-  private Transaction constructDetailTransaction(
-      String projectOwnerAccountId,
+  private SoraDistributionProportions calculateSuppliesLeftAfterDistribution(
+      BigDecimal transferAmount,
       SoraDistributionProportions supplies,
       Map<String, BigDecimal> toDistributeMap) {
     final SoraDistributionProportions suppliesLeftAfterDistributions = getSuppliesLeftAfterDistributions(
         supplies,
+        transferAmount,
         toDistributeMap
     );
     logger.debug(
         "Constructed supply detail transaction with status {}",
         suppliesLeftAfterDistributions.finished
     );
+    return suppliesLeftAfterDistributions;
+  }
+
+  private Transaction constructDetailTransaction(
+      String projectOwnerAccountId,
+      SoraDistributionProportions suppliesLeftAfterDistributions) {
     return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId)
         .setAccountDetail(
             projectOwnerAccountId,
@@ -274,6 +295,7 @@ public class SoraDistributionPluggableLogic
 
   private SoraDistributionProportions getSuppliesLeftAfterDistributions(
       SoraDistributionProportions supplies,
+      BigDecimal transferAmount,
       Map<String, BigDecimal> toDistributeMap) {
     final Map<String, BigDecimal> accountProportions = supplies.accountProportions;
     final Map<String, BigDecimal> resultingSuppliesMap = accountProportions.entrySet()
@@ -290,11 +312,13 @@ public class SoraDistributionPluggableLogic
                 }
             )
         );
+    final BigDecimal supplyWithdrawn = supplies.totalSupply.subtract(transferAmount);
+    final BigDecimal supplyLeft =
+        supplyWithdrawn.signum() == -1 ? BigDecimal.ZERO : supplyWithdrawn;
     return new SoraDistributionProportions(
         resultingSuppliesMap,
-        supplies.totalSupply,
-        resultingSuppliesMap.values().stream()
-            .allMatch(value -> value.compareTo(BigDecimal.ZERO) == 0)
+        supplyLeft,
+        supplyLeft.signum() == 0
     );
   }
 
@@ -320,15 +344,15 @@ public class SoraDistributionPluggableLogic
         decimalMap,
         totalSupply,
         decimalMap.values().stream()
-            .allMatch(value -> value.compareTo(BigDecimal.ZERO) == 0)
+            .allMatch(value -> value.signum() == 0)
     );
   }
 
   private BigDecimal calculateAmountForDistribution(
       BigDecimal percentage,
-      BigDecimal totalSupply,
+      BigDecimal transferAmount,
       BigDecimal leftToDistribute) {
-    final BigDecimal calculated = totalSupply.multiply(percentage, XOR_MATH_CONTEXT);
+    final BigDecimal calculated = transferAmount.multiply(percentage, XOR_MATH_CONTEXT);
     if (leftToDistribute == null) {
       return calculated;
     }
@@ -352,12 +376,6 @@ public class SoraDistributionPluggableLogic
         ),
         SoraDistributionProportions.class
     );
-  }
-
-  private void sendXorAndsetNewProportionsToAccount(
-      SoraDistributionProportions proportions,
-      String accountId) {
-
   }
 
   public static class SoraDistributionProportions {
