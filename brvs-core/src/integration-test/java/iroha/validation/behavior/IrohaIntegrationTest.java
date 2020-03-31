@@ -25,6 +25,7 @@ import iroha.validation.rules.impl.assets.TransferTxVolumeRule;
 import iroha.validation.rules.impl.core.SampleRule;
 import iroha.validation.service.ValidationService;
 import iroha.validation.service.impl.ValidationServiceImpl;
+import iroha.validation.transactions.plugin.impl.SoraDistributionPluggableLogic;
 import iroha.validation.transactions.provider.impl.AccountManager;
 import iroha.validation.transactions.provider.impl.BasicTransactionProvider;
 import iroha.validation.transactions.provider.impl.util.BrvsData;
@@ -229,6 +230,11 @@ public class IrohaIntegrationTest {
             transactionVerdictStorage,
             accountManager,
             accountManager,
+            new SoraDistributionPluggableLogic(
+                queryAPI,
+                validatorId,
+                validatorId
+            ),
             brvsIrohaChainListener,
             userDomainName
         ),
