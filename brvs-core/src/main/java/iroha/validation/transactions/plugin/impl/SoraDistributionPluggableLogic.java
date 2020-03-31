@@ -5,6 +5,8 @@
 
 package iroha.validation.transactions.plugin.impl;
 
+import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
+
 import iroha.protocol.Commands.Command;
 import iroha.protocol.Commands.TransferAsset;
 import iroha.protocol.Endpoint.TxStatus;
@@ -42,12 +44,13 @@ public class SoraDistributionPluggableLogic
   private static final Logger logger = LoggerFactory
       .getLogger(SoraDistributionPluggableLogic.class);
   private static final String COMMA_SPACES_REGEX = ",\\s*";
-  private static final String DISTRIBUTION_PROPORTIONS_KEY = "distribution";
-  private static final String DISTRIBUTION_FINISHED_KEY = "distribution_finished";
+  public static final String DISTRIBUTION_PROPORTIONS_KEY = "distribution";
+  public static final String DISTRIBUTION_FINISHED_KEY = "distribution_finished";
   private static final String XOR_ASSET_ID = "xor#sora";
   private static final MathContext XOR_MATH_CONTEXT = new MathContext(18, RoundingMode.DOWN);
   private static final int TRANSACTION_SIZE = 9999;
   private static final String DESCRIPTION_FORMAT = "Distribution from %s";
+  private static final String EMPTY_DETAIL_RESPONSE = "{}";
 
   private final Set<String> projectAccounts;
   private final QueryAPI queryAPI;
@@ -141,6 +144,15 @@ public class SoraDistributionPluggableLogic
       final SoraDistributionProportions initialProportions = queryProportionsForAccount(
           projectOwnerAccountId
       );
+      if (initialProportions == null
+          || initialProportions.accountProportions == null
+          || initialProportions.accountProportions.isEmpty()) {
+        logger.warn(
+            "No proportions have been set for project {}. Omitting.",
+            projectOwnerAccountId
+        );
+        return;
+      }
       // if brvs hasn't set values yet
       if (suppliesLeft == null || suppliesLeft.accountProportions == null
           || suppliesLeft.accountProportions.isEmpty()) {
@@ -190,7 +202,8 @@ public class SoraDistributionPluggableLogic
       if (!txStatus.equals(TxStatus.COMMITTED)) {
         throw new IllegalStateException(
             "Could not perform distribution. Got transaction status: " + txStatus.name()
-                + ", hash: " + Utils.toHex(byteHash)
+                + ", hashes: " + StreamSupport.stream(atomicBatch.spliterator(), false)
+                .map(Utils::toHexHash).collect(Collectors.toList())
         );
       }
       logger.info("Successfully committed distribution");
@@ -224,7 +237,7 @@ public class SoraDistributionPluggableLogic
     // In case it is going to finish, add all amount left
     if (soraDistributionFinished.finished) {
       afterDistribution.accountProportions.forEach((account, amount) ->
-          toDistributeMap.merge(account, toDistributeMap.get(account), BigDecimal::add)
+          toDistributeMap.merge(account, amount, BigDecimal::add)
       );
     }
     for (Map.Entry<String, BigDecimal> entry : toDistributeMap.entrySet()) {
@@ -365,27 +378,21 @@ public class SoraDistributionPluggableLogic
   private SoraDistributionProportions queryProportionsForAccount(
       String accountId,
       String setterAccountId) {
-    return ValidationUtils.gson.fromJson(
-        Utils.irohaUnEscape(
-            queryAPI.getAccountDetails(
-                accountId,
-                setterAccountId,
-                DISTRIBUTION_PROPORTIONS_KEY
-            )
-        ),
+    return advancedQueryAccountDetails(
+        queryAPI,
+        accountId,
+        setterAccountId,
+        DISTRIBUTION_PROPORTIONS_KEY,
         SoraDistributionProportions.class
     );
   }
 
   private SoraDistributionFinished queryDistributionsFinishedForAccount(String accountId) {
-    return ValidationUtils.gson.fromJson(
-        Utils.irohaUnEscape(
-            queryAPI.getAccountDetails(
-                accountId,
-                brvsAccountId,
-                DISTRIBUTION_FINISHED_KEY
-            )
-        ),
+    return advancedQueryAccountDetails(
+        queryAPI,
+        accountId,
+        brvsAccountId,
+        DISTRIBUTION_FINISHED_KEY,
         SoraDistributionFinished.class
     );
   }
@@ -411,6 +418,10 @@ public class SoraDistributionPluggableLogic
 
     public SoraDistributionFinished(Boolean finished) {
       this.finished = finished;
+    }
+
+    public Boolean getFinished() {
+      return finished;
     }
   }
 }
