@@ -11,9 +11,9 @@ import static jp.co.soramitsu.iroha.java.Utils.IROHA_FRIENDLY_QUOTE;
 
 import com.d3.chainadapter.client.RMQConfig;
 import com.d3.commons.config.ConfigsKt;
+import com.d3.commons.util.GsonInstance;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParser;
 import iroha.protocol.BlockOuterClass.Block;
 import iroha.protocol.Endpoint.TxStatus;
@@ -43,7 +43,7 @@ import jp.co.soramitsu.iroha.java.subscription.WaitForTerminalStatus;
 public interface ValidationUtils {
 
   EdDSAParameterSpec EdDSASpec = EdDSANamedCurveTable.getByName(ED_25519);
-  Gson gson = new GsonBuilder().create();
+  Gson gson = GsonInstance.INSTANCE.get();
   JsonParser parser = new JsonParser();
   FieldValidator fieldValidator = new FieldValidator();
 
