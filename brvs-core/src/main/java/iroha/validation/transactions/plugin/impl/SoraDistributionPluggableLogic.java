@@ -50,7 +50,6 @@ public class SoraDistributionPluggableLogic
   private static final MathContext XOR_MATH_CONTEXT = new MathContext(18, RoundingMode.DOWN);
   private static final int TRANSACTION_SIZE = 9999;
   private static final String DESCRIPTION_FORMAT = "Distribution from %s";
-  private static final String EMPTY_DETAIL_RESPONSE = "{}";
 
   private final Set<String> projectAccounts;
   private final QueryAPI queryAPI;
