@@ -157,14 +157,14 @@ public interface ValidationUtils {
       String setterAccountId,
       String key,
       Class<T> type) {
-    final JsonElement jsonElement = ValidationUtils.parser.parse(
+    final JsonElement jsonElement = parser.parse(
         queryAPI.getAccountDetails(
             accountId,
             setterAccountId,
             key
         )
     ).getAsJsonObject().get(setterAccountId);
-    return jsonElement == null ? null : ValidationUtils.gson.fromJson(
+    return jsonElement == null ? null : gson.fromJson(
         Utils.irohaUnEscape(jsonElement.getAsJsonObject().get(key).getAsString()),
         type
     );
