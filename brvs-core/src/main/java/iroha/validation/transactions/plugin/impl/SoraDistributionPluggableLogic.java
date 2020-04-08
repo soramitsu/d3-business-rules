@@ -422,7 +422,6 @@ public class SoraDistributionPluggableLogic
       this.accountProportions = accountProportions;
       this.totalSupply = totalSupply;
     }
-
   }
 
   public static class SoraDistributionFinished {
