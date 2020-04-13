@@ -54,7 +54,7 @@ public class QuorumReactionPluggableLogic extends PluggableLogic<Map<String, Col
     final List<Command> commands = StreamSupport.stream(sourceObjects.spliterator(), false)
         .map(blockTransaction -> {
               final String creatorAccountId = getTxAccountId(blockTransaction);
-              if (!userDomains.contains(getDomain(creatorAccountId))) {
+              if (!userDomains.contains(getDomainSafely(creatorAccountId))) {
                 return Collections.<Command>emptyList();
               }
 
@@ -168,5 +168,15 @@ public class QuorumReactionPluggableLogic extends PluggableLogic<Map<String, Col
               .add(addSignatory.getPublicKey().toUpperCase());
         });
     return accountAddedSignatories;
+  }
+
+  // For genesis blocks
+  private String getDomainSafely(String accountId) {
+    try {
+      return getDomain(accountId);
+    } catch (IndexOutOfBoundsException e) {
+      logger.warn("Couldn't parse domain of " + accountId, e);
+      return "";
+    }
   }
 }
