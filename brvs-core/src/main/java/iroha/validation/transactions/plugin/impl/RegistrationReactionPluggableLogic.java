@@ -64,6 +64,9 @@ public class RegistrationReactionPluggableLogic extends PluggableLogic<List<Stri
    */
   @Override
   protected void applyInternal(List<String> processableObject) {
+    if (processableObject.isEmpty()) {
+      return;
+    }
     try {
       registrationProvider.register(processableObject);
     } catch (InterruptedException e) {
