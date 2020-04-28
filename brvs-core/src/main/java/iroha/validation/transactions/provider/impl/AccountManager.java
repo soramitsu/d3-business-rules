@@ -262,6 +262,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
           new CountDownLatch(size)
       );
 
+      // TODO after XNET-96 try replacing with fixed thread pool
       partition.forEach(account -> executorService
           .submit(new RegistrationRunnable(account, registrationAwaiterWrapper))
       );
