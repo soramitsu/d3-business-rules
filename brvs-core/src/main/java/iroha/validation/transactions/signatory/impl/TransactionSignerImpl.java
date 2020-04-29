@@ -5,8 +5,6 @@
 
 package iroha.validation.transactions.signatory.impl;
 
-import io.reactivex.Scheduler;
-import io.reactivex.schedulers.Schedulers;
 import iroha.protocol.Commands.Command;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.TransactionBatch;
@@ -19,20 +17,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
 import jp.co.soramitsu.iroha.java.detail.BuildableAndSignable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 public class TransactionSignerImpl implements TransactionSigner {
-
-  private static final Logger logger = LoggerFactory.getLogger(TransactionSignerImpl.class);
 
   private final IrohaAPI irohaAPI;
   private final String brvsAccountId;
@@ -40,7 +33,6 @@ public class TransactionSignerImpl implements TransactionSigner {
   private final List<KeyPair> keyPairs;
   private final TransactionVerdictStorage transactionVerdictStorage;
   private final RegistrationProvider registrationProvider;
-  private final Scheduler scheduler = Schedulers.from(Executors.newCachedThreadPool());
 
   public TransactionSignerImpl(IrohaAPI irohaAPI,
       List<KeyPair> keyPairs,
