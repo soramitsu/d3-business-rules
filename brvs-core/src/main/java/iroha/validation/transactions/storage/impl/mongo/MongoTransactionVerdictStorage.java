@@ -81,11 +81,6 @@ public class MongoTransactionVerdictStorage implements TransactionVerdictStorage
     store(txHash.toUpperCase(), ValidationResult.REJECTED(reason), optionsToReplace);
   }
 
-  @Override
-  public void markTransactionFailed(String txHash, String reason) {
-    store(txHash.toUpperCase(), ValidationResult.FAILED(reason), optionsToReplace);
-  }
-
   /**
    * {@inheritDoc}
    */
