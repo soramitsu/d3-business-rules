@@ -204,9 +204,9 @@ public class TransactionSignerImpl implements TransactionSigner {
     }
 
     private void checkIrohaStatus(Transaction transaction) {
-      final ToriiResponse statusResponse = ValidationUtils.subscriptionStrategy
-          .subscribe(irohaAPI, Utils.hash(transaction))
-          .blockingLast();
+      final byte[] hash = Utils.hash(transaction);
+      final ToriiResponse statusResponse = ValidationUtils
+          .trackHashWithLastResponseWaiting(irohaAPI, hash);
       if (!statusResponse.getTxStatus().equals(TxStatus.COMMITTED)) {
         logger.warn(
             "Transaction {} failed in Iroha: {}",
