@@ -8,8 +8,6 @@ package iroha.validation.transactions.plugin.impl;
 import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
 import static iroha.validation.utils.ValidationUtils.trackHashWithLastResponseWaiting;
 
-import iroha.protocol.Commands.Command;
-import iroha.protocol.Commands.TransferAsset;
 import iroha.protocol.Endpoint.TxStatus;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.plugin.PluggableLogic;
@@ -83,31 +81,66 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
     logger.info("Started distribution processor with project accounts: {}", this.projectAccounts);
   }
 
+  private <T> List<T> combineLists(List<T> first, List<T> second) {
+    final ArrayList<T> arrayList = new ArrayList<>();
+    arrayList.addAll(first);
+    arrayList.addAll(second);
+    return arrayList;
+  }
+
   /**
    * {@inheritDoc}
    */
   @Override
   public Map<String, BigDecimal> filterAndTransform(Iterable<Transaction> sourceObjects) {
-    // sums all the xor transfers per project owner
-    return StreamSupport.stream(sourceObjects.spliterator(), false)
-        .flatMap(
-            transaction -> transaction.getPayload()
-                .getReducedPayload()
-                .getCommandsList()
-                .stream()
+    // sums all the xor transfers and subtractions per project owner
+    return StreamSupport
+        .stream(sourceObjects.spliterator(), false)
+        .filter(transaction -> projectAccounts
+            .contains(
+                transaction
+                    .getPayload()
+                    .getReducedPayload()
+                    .getCreatorAccountId()
+            )
         )
-        .filter(Command::hasTransferAsset)
-        .map(Command::getTransferAsset)
-        .filter(command -> XOR_ASSET_ID.equals(command.getAssetId()) &&
-            projectAccounts.contains(command.getSrcAccountId()))
         .collect(
             Collectors.groupingBy(
-                TransferAsset::getSrcAccountId,
+                tx -> tx.getPayload().getReducedPayload().getCreatorAccountId(),
                 Collectors.reducing(
                     BigDecimal.ZERO,
-                    transfer -> new BigDecimal(transfer.getAmount()),
+                    tx -> tx.getPayload()
+                        .getReducedPayload()
+                        .getCommandsList()
+                        .stream()
+                        .map(command -> {
+                          if (command.hasSubtractAssetQuantity() &&
+                              XOR_ASSET_ID.equals(
+                                  command.getSubtractAssetQuantity().getAssetId())
+                          ) {
+                            return new BigDecimal(command.getSubtractAssetQuantity().getAmount());
+                          } else if (command.hasTransferAsset() &&
+                              XOR_ASSET_ID.equals(command.getTransferAsset().getAssetId())
+                          ) {
+                            return new BigDecimal(command.getTransferAsset().getAmount());
+                          } else {
+                            return BigDecimal.ZERO;
+                          }
+                        })
+                        .reduce(BigDecimal::add)
+                        .orElse(BigDecimal.ZERO),
                     BigDecimal::add
                 )
+            )
+        )
+        .entrySet()
+        .stream()
+        // only > 0
+        .filter(entry -> entry.getValue().signum() == 1)
+        .collect(
+            Collectors.toMap(
+                Entry::getKey,
+                Entry::getValue
             )
         );
   }
