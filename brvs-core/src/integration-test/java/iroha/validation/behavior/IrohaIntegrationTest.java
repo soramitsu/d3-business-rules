@@ -258,7 +258,7 @@ public class IrohaIntegrationTest {
         "uq",
         userDomainName,
         accountsHolderAccount,
-        accountsHolderAccount,
+        validatorId,
         Collections.singletonList(validatorKeypair)
     );
     transactionVerdictStorage = new MongoTransactionVerdictStorage(mongoHost, mongoPort);
