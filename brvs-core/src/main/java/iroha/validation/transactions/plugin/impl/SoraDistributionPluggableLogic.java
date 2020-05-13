@@ -14,6 +14,7 @@ import iroha.validation.rules.impl.billing.BillingInfo;
 import iroha.validation.rules.impl.billing.BillingInfo.BillingTypeEnum;
 import iroha.validation.rules.impl.billing.BillingRule;
 import iroha.validation.transactions.plugin.PluggableLogic;
+import iroha.validation.transactions.plugin.impl.SoraDistributionPluggableLogic.SoraDistributionInputContext;
 import iroha.validation.utils.ValidationUtils;
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -21,6 +22,7 @@ import java.math.RoundingMode;
 import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -42,7 +44,7 @@ import org.springframework.util.StringUtils;
 /**
  * Sora distribution logic processor
  */
-public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, BigDecimal>> {
+public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistributionInputContext> {
 
   private static final Logger logger = LoggerFactory
       .getLogger(SoraDistributionPluggableLogic.class);
@@ -104,64 +106,72 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
    * {@inheritDoc}
    */
   @Override
-  public Map<String, BigDecimal> filterAndTransform(Iterable<Transaction> sourceObjects) {
+  public SoraDistributionInputContext filterAndTransform(Iterable<Transaction> sourceObjects) {
     // sums all the xor transfers and subtractions per project owner
-    return StreamSupport
-        .stream(sourceObjects.spliterator(), false)
-        .filter(transaction -> projectAccounts
-            .contains(
-                transaction
-                    .getPayload()
-                    .getReducedPayload()
-                    .getCreatorAccountId()
-            )
-        )
-        .collect(
-            Collectors.groupingBy(
-                tx -> tx.getPayload().getReducedPayload().getCreatorAccountId(),
-                Collectors.reducing(
-                    BigDecimal.ZERO,
-                    tx -> tx.getPayload()
+    return new SoraDistributionInputContext(
+        StreamSupport
+            .stream(sourceObjects.spliterator(), false)
+            .filter(transaction -> projectAccounts
+                .contains(
+                    transaction
+                        .getPayload()
                         .getReducedPayload()
-                        .getCommandsList()
-                        .stream()
-                        .map(command -> {
-                          if (command.hasSubtractAssetQuantity() &&
-                              XOR_ASSET_ID.equals(
-                                  command.getSubtractAssetQuantity().getAssetId())
-                          ) {
-                            return new BigDecimal(command.getSubtractAssetQuantity().getAmount());
-                          } else if (command.hasTransferAsset() &&
-                              XOR_ASSET_ID.equals(command.getTransferAsset().getAssetId())
-                          ) {
-                            return new BigDecimal(command.getTransferAsset().getAmount());
-                          } else {
-                            return BigDecimal.ZERO;
-                          }
-                        })
-                        .reduce(BigDecimal::add)
-                        .orElse(BigDecimal.ZERO),
-                    BigDecimal::add
+                        .getCreatorAccountId()
                 )
             )
-        )
-        .entrySet()
-        .stream()
-        // only > 0
-        .filter(entry -> entry.getValue().signum() == 1)
-        .collect(
-            Collectors.toMap(
-                Entry::getKey,
-                Entry::getValue
+            .collect(
+                Collectors.groupingBy(
+                    tx -> tx.getPayload().getReducedPayload().getCreatorAccountId(),
+                    Collectors.reducing(
+                        BigDecimal.ZERO,
+                        tx -> tx.getPayload()
+                            .getReducedPayload()
+                            .getCommandsList()
+                            .stream()
+                            .map(command -> {
+                              if (command.hasSubtractAssetQuantity() &&
+                                  XOR_ASSET_ID.equals(
+                                      command.getSubtractAssetQuantity().getAssetId())
+                              ) {
+                                return new BigDecimal(
+                                    command.getSubtractAssetQuantity().getAmount());
+                              } else if (command.hasTransferAsset() &&
+                                  XOR_ASSET_ID.equals(command.getTransferAsset().getAssetId())
+                              ) {
+                                return new BigDecimal(command.getTransferAsset().getAmount());
+                              } else {
+                                return BigDecimal.ZERO;
+                              }
+                            })
+                            .reduce(BigDecimal::add)
+                            .orElse(BigDecimal.ZERO),
+                        BigDecimal::add
+                    )
+                )
             )
-        );
+            .entrySet()
+            .stream()
+            // only > 0
+            .filter(entry -> entry.getValue().signum() == 1)
+            .collect(
+                Collectors.toMap(
+                    Entry::getKey,
+                    Entry::getValue
+                )
+            ),
+        StreamSupport
+            .stream(sourceObjects.spliterator(), false)
+            .map(tx -> tx.getPayload().getReducedPayload().getCreatedTime())
+            .max(Comparator.naturalOrder())
+            .orElse(System.currentTimeMillis())
+    );
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  protected void applyInternal(Map<String, BigDecimal> processableObject) {
+  protected void applyInternal(SoraDistributionInputContext processableObject) {
     processDistributions(processableObject);
   }
 
@@ -178,11 +188,16 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
    * Processes committed project owners transfers and performs corresponding distributions if
    * needed
    *
-   * @param transferAssetMap {@link Map} of project owner account id to aggregated volume of their
-   * transfer within the block
+   * @param soraDistributionInputContext {@link SoraDistributionInputContext} of project owner
+   * account id to aggregated volume of their transfer within the block and the timestamp to use
    */
-  private void processDistributions(Map<String, BigDecimal> transferAssetMap) {
-    if (transferAssetMap != null && !transferAssetMap.isEmpty()) {
+  private void processDistributions(SoraDistributionInputContext soraDistributionInputContext) {
+    final Boolean isContextEmpty = Optional.ofNullable(soraDistributionInputContext)
+        .map(context -> context.projectAmountMap)
+        .map(Map::isEmpty)
+        .orElse(true);
+    if (!isContextEmpty) {
+      final Map<String, BigDecimal> transferAssetMap = soraDistributionInputContext.projectAmountMap;
       // map for batches to send after processing
       final Map<String, List<Transaction>> transactionMap = new HashMap<>();
       final BigDecimal fee = getFeeSafely();
@@ -250,7 +265,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
                 finalSuppliesLeft,
                 toDistributeMap,
                 initialProportions,
-                fee
+                fee,
+                soraDistributionInputContext.timestamp
             ),
             this::mergeLists
         );
@@ -268,6 +284,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
               brvsKeypair
           );
           final IrohaAPI irohaAPI = queryAPI.getApi();
+          // TODO XNET-96 persist state of distribution
           irohaAPI.transactionListSync(atomicBatch);
           final byte[] byteHash = Utils.hash(atomicBatch.iterator().next());
           final TxStatus txStatus = trackHashWithLastResponseWaiting(irohaAPI, byteHash)
@@ -291,7 +308,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
       SoraDistributionProportions supplies,
       Map<String, BigDecimal> toDistributeMap,
       SoraDistributionProportions initialProportions,
-      BigDecimal fee) {
+      BigDecimal fee,
+      long creationTime) {
     int commandCounter = 0;
     final List<Transaction> transactionList = new ArrayList<>();
     final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE);
@@ -312,16 +330,18 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
         constructDetailTransaction(
             projectOwnerAccountId,
             afterDistribution,
-            soraDistributionFinished
+            soraDistributionFinished,
+            creationTime
         )
     );
     transactionList.add(
         constructFeeTransaction(
-            fee
+            fee,
+            creationTime
         )
     );
     TransactionBuilder transactionBuilder = jp.co.soramitsu.iroha.java.Transaction
-        .builder(brvsAccountId);
+        .builder(brvsAccountId, creationTime);
     // In case it is going to finish, add all amounts left
     if (soraDistributionFinished.finished) {
       afterDistribution.accountProportions.forEach((account, amount) ->
@@ -376,8 +396,9 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
   private Transaction constructDetailTransaction(
       String projectOwnerAccountId,
       SoraDistributionProportions suppliesLeftAfterDistributions,
-      SoraDistributionFinished soraDistributionFinished) {
-    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId)
+      SoraDistributionFinished soraDistributionFinished,
+      long creationTime) {
+    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId, creationTime)
         .setAccountDetail(
             projectOwnerAccountId,
             DISTRIBUTION_PROPORTIONS_KEY,
@@ -396,9 +417,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
         .build();
   }
 
-  private Transaction constructFeeTransaction(
-      BigDecimal amount) {
-    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId)
+  private Transaction constructFeeTransaction(BigDecimal amount, long creationTime) {
+    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId, creationTime)
         .subtractAssetQuantity(
             XOR_ASSET_ID,
             amount
@@ -536,6 +556,20 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
 
     public Boolean getFinished() {
       return finished;
+    }
+  }
+
+  public static class SoraDistributionInputContext {
+
+    private Map<String, BigDecimal> projectAmountMap;
+
+    private long timestamp;
+
+    public SoraDistributionInputContext(
+        Map<String, BigDecimal> projectAmountMap,
+        long timestamp) {
+      this.projectAmountMap = projectAmountMap;
+      this.timestamp = timestamp;
     }
   }
 }
