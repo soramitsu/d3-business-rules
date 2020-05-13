@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -190,9 +191,10 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
         final SoraDistributionFinished distributionFinished = queryDistributionsFinishedForAccount(
             projectOwnerAccountId
         );
-        if (distributionFinished != null
-            && distributionFinished.finished != null
-            && distributionFinished.finished) {
+        final boolean isFinished = Optional.ofNullable(distributionFinished)
+            .map(SoraDistributionFinished::getFinished)
+            .orElse(false);
+        if (isFinished) {
           logger.info("No need to perform any more distributions for {}", projectOwnerAccountId);
           return;
         }
@@ -203,9 +205,11 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
         final SoraDistributionProportions initialProportions = queryProportionsForAccount(
             projectOwnerAccountId
         );
-        if (initialProportions == null
-            || initialProportions.accountProportions == null
-            || initialProportions.accountProportions.isEmpty()) {
+        final boolean isProportionsEmpty = Optional.ofNullable(initialProportions)
+            .map(p -> p.accountProportions)
+            .map(Map::isEmpty)
+            .orElse(true);
+        if (isProportionsEmpty) {
           logger.warn(
               "No proportions have been set for project {}. Omitting.",
               projectOwnerAccountId
@@ -213,8 +217,11 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
           return;
         }
         // if brvs hasn't set values yet
-        if (suppliesLeft == null || suppliesLeft.accountProportions == null
-            || suppliesLeft.accountProportions.isEmpty()) {
+        final boolean isBrvsProportionsEmpty = Optional.ofNullable(suppliesLeft)
+            .map(p -> p.accountProportions)
+            .map(Map::isEmpty)
+            .orElse(true);
+        if (isBrvsProportionsEmpty) {
           logger.warn("BRVS distribution state hasn't been set yet for {}", projectOwnerAccountId);
           suppliesLeft = constructInitialAmountMap(initialProportions);
         }
@@ -421,8 +428,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
                       initialProportions.accountProportions.get(entry.getKey()),
                       fee
                   ).add(subtrahend);
-                  final BigDecimal remainder = entry.getValue().subtract(feeSubtrahend);
-                  return remainder.signum() == -1 ? BigDecimal.ZERO : remainder;
+                  return entry.getValue().subtract(feeSubtrahend).max(BigDecimal.ZERO);
                 }
             )
         );
