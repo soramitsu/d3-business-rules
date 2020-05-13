@@ -20,7 +20,7 @@ import org.springframework.util.StringUtils;
 
 public class ProjectAccountProvider {
 
-  private static final String ACCOUNT_PLACEHOLDER = "__";
+  public static final String ACCOUNT_PLACEHOLDER = "__";
 
   private final String accountsHolder;
   private final String accountsSetter;
