@@ -58,7 +58,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<Map<String, B
   );
   private static final int TRANSACTION_SIZE = 9999;
   private static final String DESCRIPTION_FORMAT = "Distribution from %s";
-  private static final BigDecimal FEE_RATE = new BigDecimal(10);
+  private static final BigDecimal FEE_RATE = new BigDecimal("100");
 
   private final Set<String> projectAccounts;
   private final QueryAPI queryAPI;

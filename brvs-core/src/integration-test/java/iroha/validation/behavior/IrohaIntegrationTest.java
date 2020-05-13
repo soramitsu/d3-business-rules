@@ -690,10 +690,10 @@ public class IrohaIntegrationTest {
   void exactDistributionPortions() throws InterruptedException {
     // projectOwner is a json setter
     final Map<String, BigDecimal> proportionsMap = new HashMap<>();
-    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.05"));
-    proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.03"));
-    proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.02"));
-    final BigDecimal totalSupply = new BigDecimal("10000");
+    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.005"));
+    proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
+    proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
+    final BigDecimal totalSupply = new BigDecimal("100000");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
         totalSupply
@@ -721,7 +721,7 @@ public class IrohaIntegrationTest {
     ).blockingLast();
     irohaAPI.transaction(
         Transaction.builder(projectOwnerId)
-            .addAssetQuantity(assetId, new BigDecimal("30000"))
+            .addAssetQuantity(assetId, new BigDecimal("300000"))
             .setAccountDetail(
                 projectOwnerId,
                 DISTRIBUTION_PROPORTIONS_KEY,
@@ -731,7 +731,7 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
 
-    final BigDecimal firstAmount = new BigDecimal("6000");
+    final BigDecimal firstAmount = new BigDecimal("60000");
 
     irohaAPI.transaction(
         Transaction.builder(projectOwnerId)
