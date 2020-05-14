@@ -16,10 +16,13 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import jp.co.soramitsu.iroha.java.QueryAPI;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
 public class ProjectAccountProvider {
 
+  private static final Logger logger = LoggerFactory.getLogger(ProjectAccountProvider.class);
   public static final String ACCOUNT_PLACEHOLDER = "__";
 
   private final String accountsHolder;
@@ -51,11 +54,15 @@ public class ProjectAccountProvider {
         .entrySet()
         .stream()
         .collect(
-            Collectors.toMap(
+            Collectors.toConcurrentMap(
                 entry -> replaceLast(entry.getKey(), ACCOUNT_PLACEHOLDER, accountIdDelimiter),
                 Entry::getValue
             )
         );
+    logger.info(
+        "Initialized project accounts provider with the list of projects: {}",
+        projectDescriptions.toString()
+    );
   }
 
   public boolean isProjectAccount(String accountId) {
@@ -67,6 +74,7 @@ public class ProjectAccountProvider {
   }
 
   public String addProjectWithDescription(String projectAccountId, String description) {
+    logger.info("Adding a project: {} - {}", projectAccountId, description);
     return projectDescriptions
         .put(
             replaceLast(
