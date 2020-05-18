@@ -792,7 +792,7 @@ public class IrohaIntegrationTest {
     assertEquals(
         0,
         oneBalance.add(new BigDecimal("299.95")).add(new BigDecimal("199.95"))
-            .compareTo(getBalance(projectParticipantTwoId))
+            .compareTo(getBalance(projectParticipantOneId))
     );
     assertEquals(
         0,
