@@ -142,6 +142,7 @@ public class IrohaIntegrationTest {
   private Integer mongoPort;
   private ValidationServiceImpl validationService;
   private final BillingRule billingRuleMock = mock(BillingRule.class);
+  private QueryAPI queryAPI;
 
   private static BlockOuterClass.Block getGenesisBlock() {
     return new GenesisBlockBuilder()
@@ -269,7 +270,7 @@ public class IrohaIntegrationTest {
         serviceDomainName,
         serviceDomainName
     );
-    final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
+    queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
     final IrohaQueryHelper irohaQueryHelper = new IrohaQueryHelperImpl(
         queryAPI,
         ValidationUtils.REGISTRATION_BATCH_SIZE
@@ -721,18 +722,9 @@ public class IrohaIntegrationTest {
     );
     final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
 
-    BigDecimal oneBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantOneId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
-    BigDecimal twoBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantTwoId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
-    BigDecimal threeBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantThreeId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+    BigDecimal twoBalance = getBalance(projectParticipantTwoId);
+    BigDecimal threeBalance = getBalance(projectParticipantThreeId);
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
@@ -763,20 +755,17 @@ public class IrohaIntegrationTest {
 
     Thread.sleep(5000);
 
-    assertEquals(0, oneBalance.add(new BigDecimal("299.95"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantOneId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        oneBalance.add(new BigDecimal("299.95")).compareTo(getBalance(projectParticipantOneId))
     );
-    assertEquals(0, twoBalance.add(new BigDecimal("179.97"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantTwoId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        twoBalance.add(new BigDecimal("179.97")).compareTo(getBalance(projectParticipantTwoId))
     );
-    assertEquals(0, threeBalance.add(new BigDecimal("119.98"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantThreeId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        threeBalance.add(new BigDecimal("119.98")).compareTo(getBalance(projectParticipantThreeId))
     );
     final SoraDistributionFinished finished = advancedQueryAccountDetails(
         queryAPI,
@@ -800,20 +789,20 @@ public class IrohaIntegrationTest {
 
     Thread.sleep(5000);
 
-    assertEquals(0, oneBalance.add(new BigDecimal("299.95")).add(new BigDecimal("199.95"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantOneId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        oneBalance.add(new BigDecimal("299.95")).add(new BigDecimal("199.95"))
+            .compareTo(getBalance(projectParticipantTwoId))
     );
-    assertEquals(0, twoBalance.add(new BigDecimal("179.97")).add(new BigDecimal("119.97"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantTwoId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        twoBalance.add(new BigDecimal("179.97")).add(new BigDecimal("119.97"))
+            .compareTo(getBalance(projectParticipantTwoId))
     );
-    assertEquals(0, threeBalance.add(new BigDecimal("119.98")).add(new BigDecimal("79.98"))
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantThreeId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+
+        0, threeBalance.add(new BigDecimal("119.98")).add(new BigDecimal("79.98"))
+            .compareTo(getBalance(projectParticipantThreeId))
     );
     final SoraDistributionFinished finishedNow = advancedQueryAccountDetails(
         queryAPI,
@@ -846,20 +835,10 @@ public class IrohaIntegrationTest {
         proportionsMap,
         totalSupply
     );
-    final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
 
-    BigDecimal oneBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantOneId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
-    BigDecimal twoBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantTwoId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
-    BigDecimal threeBalance = new BigDecimal(queryAPI.getAccountAssets(projectParticipantThreeId)
-        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-        .findAny().get().getBalance()
-    );
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+    BigDecimal twoBalance = getBalance(projectParticipantTwoId);
+    BigDecimal threeBalance = getBalance(projectParticipantThreeId);
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
@@ -892,20 +871,23 @@ public class IrohaIntegrationTest {
 
     // Nothing has changed, no distribution performed
 
-    assertEquals(0, oneBalance
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantOneId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
     );
-    assertEquals(0, twoBalance
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantTwoId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        twoBalance.compareTo(getBalance(projectParticipantTwoId))
     );
-    assertEquals(0, threeBalance
-        .compareTo(new BigDecimal(queryAPI.getAccountAssets(projectParticipantThreeId)
-            .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
-            .findAny().get().getBalance()))
+    assertEquals(
+        0,
+        threeBalance.compareTo(getBalance(projectParticipantThreeId))
     );
+  }
+
+  private BigDecimal getBalance(String accountId) {
+    return new BigDecimal(queryAPI.getAccountAssets(accountId)
+        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
+        .findAny().get().getBalance());
   }
 }
