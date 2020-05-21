@@ -25,8 +25,8 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-import javafx.util.Pair;
 import jp.co.soramitsu.iroha.java.QueryAPI;
+import kotlin.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
@@ -204,7 +204,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
    */
   @Override
   protected void applyInternal(Pair<Map<String, String>, BigDecimal> processableObject) {
-    final Map<String, String> newDetails = processableObject.getKey();
+    final Map<String, String> newDetails = processableObject.getFirst();
     if (newDetails.containsKey(limitTimeKey)) {
       logger.info("Got external withdrawal limits details update");
       if (newDetails.containsKey(limitAmountKey)) {
@@ -234,7 +234,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
       }
     }
 
-    final BigDecimal withdrawalsAmount = processableObject.getValue();
+    final BigDecimal withdrawalsAmount = processableObject.getSecond();
     if (withdrawalsAmount.compareTo(BigDecimal.ZERO) > 0) {
       logger.info("Got committed withdrawal limit transaction update");
       final XorWithdrawalLimitRemainder currentLimits = this.xorWithdrawalLimitRemainder.get();
