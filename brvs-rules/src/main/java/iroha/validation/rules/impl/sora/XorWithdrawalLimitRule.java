@@ -17,7 +17,7 @@ import org.springframework.util.StringUtils;
 
 public class XorWithdrawalLimitRule implements Rule {
 
-  public static final String assetId = "xor#sora";
+  public static final String ASSET_ID = "xor#sora";
 
   private final String withdrawalAccountId;
   private final AtomicReference<XorWithdrawalLimitRemainder> xorWithdrawalLimitRemainder;
@@ -45,7 +45,7 @@ public class XorWithdrawalLimitRule implements Rule {
         .filter(Command::hasTransferAsset)
         .map(Command::getTransferAsset)
         .filter(cmd -> withdrawalAccountId.equals(cmd.getDestAccountId()))
-        .filter(cmd -> assetId.equals(cmd.getAssetId()))
+        .filter(cmd -> ASSET_ID.equals(cmd.getAssetId()))
         .map(TransferAsset::getAmount)
         .map(BigDecimal::new)
         .reduce(BigDecimal::add)

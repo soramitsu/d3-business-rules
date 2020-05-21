@@ -5,7 +5,7 @@
 
 package iroha.validation.transactions.plugin.impl.sora;
 
-import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.assetId;
+import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.ASSET_ID;
 import static iroha.validation.utils.ValidationUtils.sendWithLastResponseWaiting;
 
 import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -39,8 +40,8 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
 
   private static final Logger logger = LoggerFactory
       .getLogger(XorWithdrawalLimitReactionPluggableLogic.class);
-  public final static String limitTimeKey = "withdrawal_time_update";
-  public final static String limitAmountKey = "withdrawal_limit";
+  public static final String LIMIT_TIME_KEY = "withdrawal_time_update";
+  public static final String LIMIT_AMOUNT_KEY = "withdrawal_limit";
 
   private final QueryAPI queryAPI;
   private final String limitHolderAccount;
@@ -121,7 +122,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         getDetailedValueFrom(
             irohaQueryHelper,
             setterAccountId,
-            limitTimeKey
+            LIMIT_TIME_KEY
         )
     );
   }
@@ -131,7 +132,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         getDetailedValueFrom(
             irohaQueryHelper,
             setterAccountId,
-            limitAmountKey
+            LIMIT_AMOUNT_KEY
         )
     );
   }
@@ -170,8 +171,8 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         );
 
     // to care only about new transactions if there is an external update
-    final long lastUpdateTime =
-        newDetails.containsKey(limitTimeKey) ? Long.parseLong(newDetails.get(limitTimeKey)) : 0L;
+    final long lastUpdateTime = Optional.ofNullable(newDetails.get(LIMIT_TIME_KEY))
+        .map(Long::parseLong).orElse(0L);
 
     final BigDecimal withdrawalsAmount = StreamSupport.stream(sourceObjects.spliterator(), false)
         .map(Transaction::getPayload)
@@ -181,7 +182,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         .flatMap(Collection::stream)
         .filter(Command::hasTransferAsset)
         .map(Command::getTransferAsset)
-        .filter(command -> assetId.equals(command.getAssetId()))
+        .filter(command -> ASSET_ID.equals(command.getAssetId()))
         .filter(command -> withdrawalAccountId.equals(command.getDestAccountId()))
         .map(TransferAsset::getAmount)
         .map(BigDecimal::new)
@@ -205,16 +206,16 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
   @Override
   protected void applyInternal(Pair<Map<String, String>, BigDecimal> processableObject) {
     final Map<String, String> newDetails = processableObject.getFirst();
-    if (newDetails.containsKey(limitTimeKey)) {
+    if (newDetails.containsKey(LIMIT_TIME_KEY)) {
       logger.info("Got external withdrawal limits details update");
-      if (newDetails.containsKey(limitAmountKey)) {
-        final String newTimeDue = newDetails.get(limitTimeKey);
-        final String newLimitValue = newDetails.get(limitAmountKey);
+      if (newDetails.containsKey(LIMIT_AMOUNT_KEY)) {
+        final String newTimeDue = newDetails.get(LIMIT_TIME_KEY);
+        final String newLimitValue = newDetails.get(LIMIT_AMOUNT_KEY);
         TxStatus txStatus = sendWithLastResponseWaiting(
             queryAPI.getApi(),
             jp.co.soramitsu.iroha.java.Transaction.builder(queryAPI.getAccountId())
-                .setAccountDetail(limitHolderAccount, limitAmountKey, newLimitValue)
-                .setAccountDetail(limitHolderAccount, limitTimeKey, newTimeDue)
+                .setAccountDetail(limitHolderAccount, LIMIT_AMOUNT_KEY, newLimitValue)
+                .setAccountDetail(limitHolderAccount, LIMIT_TIME_KEY, newTimeDue)
                 .sign(queryAPI.getKeyPair())
                 .build()
         ).getTxStatus();

@@ -5,7 +5,7 @@
 
 package iroha.validation.rules.impl;
 
-import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.assetId;
+import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.ASSET_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
@@ -15,7 +15,6 @@ import iroha.protocol.Commands.Command;
 import iroha.protocol.Commands.TransferAsset;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.rules.Rule;
-import iroha.validation.rules.impl.assets.TransferTxVolumeRule;
 import iroha.validation.rules.impl.sora.XorWithdrawalLimitRule;
 import iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.XorWithdrawalLimitRemainder;
 import iroha.validation.verdict.Verdict;
@@ -44,7 +43,7 @@ class XorWithdrawalRuleTest {
     when(transferAsset.getSrcAccountId()).thenReturn("user@users");
     when(transferAsset.getDestAccountId()).thenReturn(withdrawalAccountId);
     when(transferAsset.getDescription()).thenReturn("description");
-    when(transferAsset.getAssetId()).thenReturn(assetId);
+    when(transferAsset.getAssetId()).thenReturn(ASSET_ID);
     when(transferAsset.getAmount()).thenReturn(amount.toPlainString());
 
     final Command command = mock(Command.class);

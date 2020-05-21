@@ -5,9 +5,9 @@
 
 package iroha.validation.plugin;
 
-import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.assetId;
-import static iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic.limitAmountKey;
-import static iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic.limitTimeKey;
+import static iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.ASSET_ID;
+import static iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic.LIMIT_AMOUNT_KEY;
+import static iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic.LIMIT_TIME_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import jp.co.soramitsu.crypto.ed25519.Ed25519Sha3;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
 import jp.co.soramitsu.iroha.java.QueryAPI;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -60,18 +59,18 @@ public class XorLimitsReactionTest {
     final Command commandTime = mock(Command.class);
     final SetAccountDetail setAccountDetailTime = mock(SetAccountDetail.class);
     when(setAccountDetailTime.getAccountId()).thenReturn(USER_ID);
-    when(setAccountDetailTime.getKey()).thenReturn(limitTimeKey);
+    when(setAccountDetailTime.getKey()).thenReturn(LIMIT_TIME_KEY);
     when(setAccountDetailTime.getValue()).thenReturn(String.valueOf(time));
 
     final Command commandValue = mock(Command.class);
     final SetAccountDetail setAccountDetailValue = mock(SetAccountDetail.class);
     when(setAccountDetailValue.getAccountId()).thenReturn(USER_ID);
-    when(setAccountDetailValue.getKey()).thenReturn(limitAmountKey);
+    when(setAccountDetailValue.getKey()).thenReturn(LIMIT_AMOUNT_KEY);
     when(setAccountDetailValue.getValue()).thenReturn(newLimit.toPlainString());
 
     final Command transferCommand = mock(Command.class);
     final TransferAsset transferAsset = mock(TransferAsset.class);
-    when(transferAsset.getAssetId()).thenReturn(assetId);
+    when(transferAsset.getAssetId()).thenReturn(ASSET_ID);
     when(transferAsset.getAmount()).thenReturn(newLimit.toPlainString());
     when(transferAsset.getDestAccountId()).thenReturn(USER_ID);
 
