@@ -38,7 +38,7 @@ pipeline {
             }
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-soramitsu-rw', usernameVariable: 'DOCKER_REGISTRY_USERNAME', passwordVariable: 'DOCKER_REGISTRY_PASSWORD')]) {
+                    withCredentials([usernamePassword(credentialsId: 'bot-soranet-rw', usernameVariable: 'DOCKER_REGISTRY_USERNAME', passwordVariable: 'DOCKER_REGISTRY_PASSWORD')]) {
                         env.DOCKER_REGISTRY_URL = "https://docker.soramitsu.co.jp"
                         env.TAG = env.TAG_NAME ? env.TAG_NAME : dockerTags[env.GIT_BRANCH]
                         sh "./gradlew dockerPush"
