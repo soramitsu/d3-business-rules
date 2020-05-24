@@ -96,11 +96,15 @@ public class IrohaIntegrationTest {
   private static final String userDomainName = "user";
   private static final String roleName = "user";
   private static final String senderName = "sender";
-  private static final String projectOwner = "owner";
+  private static final String projectOwnerOne = "owner1";
+  private static final String projectOwnerTwo = "owner2";
+  private static final String projectOwnerThree = "owner3";
   private static final String projectParticipantOne = "participantone";
   private static final String projectParticipantTwo = "participanttwo";
   private static final String projectParticipantThree = "participantthree";
-  private static final String projectOwnerId = String.format("%s@%s", projectOwner, userDomainName);
+  private static final String projectOwnerOneId = String.format("%s@%s", projectOwnerOne, userDomainName);
+  private static final String projectOwnerTwoId = String.format("%s@%s", projectOwnerTwo, userDomainName);
+  private static final String projectOwnerThreeId = String.format("%s@%s", projectOwnerThree, userDomainName);
   private static final String projectParticipantOneId = String
       .format("%s@%s", projectParticipantOne, userDomainName);
   private static final String projectParticipantTwoId = String
@@ -192,7 +196,9 @@ public class IrohaIntegrationTest {
                     "7a4af859a775dd7c7b4024c97c8118f0280455b8135f6f41422101f0397e0fa5"))
                 .createAsset(asset, serviceDomainName, 18)
                 // create project owner acc
-                .createAccount(projectOwner, userDomainName, projectOwnerKeypair.getPublic())
+                .createAccount(projectOwnerOne, userDomainName, projectOwnerKeypair.getPublic())
+                .createAccount(projectOwnerTwo, userDomainName, projectOwnerKeypair.getPublic())
+                .createAccount(projectOwnerThree, userDomainName, projectOwnerKeypair.getPublic())
                 // create project participants accs
                 .createAccount(
                     projectParticipantOne,
@@ -210,9 +216,19 @@ public class IrohaIntegrationTest {
                     projectOwnerKeypair.getPublic()
                 )
                 .setAccountDetail(
-                    projectOwnerId,
-                    projectOwner + ACCOUNT_PLACEHOLDER + userDomainName,
-                    "HELLO"
+                    projectOwnerOneId,
+                    projectOwnerOne + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "HELLO1"
+                )
+                .setAccountDetail(
+                    projectOwnerTwoId,
+                    projectOwnerOne + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "HELLO2"
+                )
+                .setAccountDetail(
+                    projectOwnerThreeId,
+                    projectOwnerOne + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "HELLO3"
                 )
                 // transactions in genesis block can be unsigned
                 .build()
@@ -314,7 +330,7 @@ public class IrohaIntegrationTest {
     );
     final SimpleAggregationValidator validator = new SimpleAggregationValidator(ruleMap);
     final ProjectAccountProvider projectAccountProvider = new ProjectAccountProvider(
-        projectOwnerId,
+        projectOwnerOneId,
         validatorId,
         irohaQueryHelper
     );
@@ -334,7 +350,7 @@ public class IrohaIntegrationTest {
                 ),
                 new SoraDistributionPluggableLogic(
                     queryAPI,
-                    projectOwnerId,
+                    projectOwnerOneId,
                     billingRuleMock,
                     projectAccountProvider,
                     irohaQueryHelper
@@ -733,10 +749,10 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
+        Transaction.builder(projectOwnerOneId)
             .addAssetQuantity(assetId, new BigDecimal("300000"))
             .setAccountDetail(
-                projectOwnerId,
+                projectOwnerOneId,
                 DISTRIBUTION_PROPORTIONS_KEY,
                 Utils.irohaEscape(gson.toJson(proportions))
             )
@@ -747,8 +763,8 @@ public class IrohaIntegrationTest {
     final BigDecimal firstAmount = new BigDecimal("60000");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 1", firstAmount)
+        Transaction.builder(projectOwnerOneId)
+            .transferAsset(projectOwnerOneId, receiverId, assetId, "perevod nomer 1", firstAmount)
             .sign(projectOwnerKeypair)
             .build()
     ).blockingLast();
@@ -769,7 +785,7 @@ public class IrohaIntegrationTest {
     );
     final SoraDistributionFinished finished = advancedQueryAccountDetails(
         queryAPI,
-        projectOwnerId,
+        projectOwnerOneId,
         validatorId,
         DISTRIBUTION_FINISHED_KEY,
         SoraDistributionFinished.class
@@ -781,8 +797,8 @@ public class IrohaIntegrationTest {
     final BigDecimal secondAmount = firstAmount;
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 2", secondAmount)
+        Transaction.builder(projectOwnerOneId)
+            .transferAsset(projectOwnerOneId, receiverId, assetId, "perevod nomer 2", secondAmount)
             .sign(projectOwnerKeypair)
             .build()
     ).blockingLast();
@@ -806,7 +822,7 @@ public class IrohaIntegrationTest {
     );
     final SoraDistributionFinished finishedNow = advancedQueryAccountDetails(
         queryAPI,
-        projectOwnerId,
+        projectOwnerOneId,
         validatorId,
         DISTRIBUTION_FINISHED_KEY,
         SoraDistributionFinished.class
@@ -847,10 +863,10 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
+        Transaction.builder(projectOwnerTwoId)
             .addAssetQuantity(assetId, new BigDecimal("300000"))
             .setAccountDetail(
-                projectOwnerId,
+                projectOwnerTwoId,
                 DISTRIBUTION_PROPORTIONS_KEY,
                 Utils.irohaEscape(gson.toJson(proportions))
             )
@@ -861,8 +877,8 @@ public class IrohaIntegrationTest {
     final BigDecimal firstAmount = new BigDecimal("60000");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 1", firstAmount)
+        Transaction.builder(projectOwnerTwoId)
+            .transferAsset(projectOwnerOneId, receiverId, assetId, "perevod nomer 1", firstAmount)
             .sign(projectOwnerKeypair)
             .build()
     ).blockingLast();
@@ -912,10 +928,10 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
+        Transaction.builder(projectOwnerThreeId)
             .addAssetQuantity(assetId, totalSupply.add(BigDecimal.ONE))
             .setAccountDetail(
-                projectOwnerId,
+                projectOwnerThreeId,
                 DISTRIBUTION_PROPORTIONS_KEY,
                 Utils.irohaEscape(gson.toJson(proportions))
             )
@@ -927,8 +943,8 @@ public class IrohaIntegrationTest {
     final BigDecimal feeAmount = new BigDecimal("0.1");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 1", firstAmount)
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 1", firstAmount)
             .subtractAssetQuantity(assetId, feeAmount)
             .sign(projectOwnerKeypair)
             .build()
@@ -945,8 +961,8 @@ public class IrohaIntegrationTest {
     final BigDecimal secondAmount = new BigDecimal("4000");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 2", secondAmount)
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 2", secondAmount)
             .subtractAssetQuantity(assetId, feeAmount)
             .sign(projectOwnerKeypair)
             .build()
@@ -964,8 +980,8 @@ public class IrohaIntegrationTest {
     final BigDecimal thirdAmount = new BigDecimal("3000");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 3", thirdAmount)
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 3", thirdAmount)
             .subtractAssetQuantity(assetId, feeAmount)
             .sign(projectOwnerKeypair)
             .build()
@@ -983,8 +999,8 @@ public class IrohaIntegrationTest {
     final BigDecimal fourthAmount = new BigDecimal("2999.6");
 
     irohaAPI.transaction(
-        Transaction.builder(projectOwnerId)
-            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 4", fourthAmount)
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 4", fourthAmount)
             .subtractAssetQuantity(assetId, feeAmount)
             .sign(projectOwnerKeypair)
             .build()
