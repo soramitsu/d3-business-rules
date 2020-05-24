@@ -885,6 +885,121 @@ public class IrohaIntegrationTest {
     );
   }
 
+  /**
+   * @given {@link ValidationService} instance with {@link SoraDistributionPluggableLogic} attached
+   * and relevant JSON with Sora distribution proportions provided
+   * @when {@link Transaction} with {@link iroha.protocol.Commands.Command TransferAsset} command
+   * going from a project owner appears
+   * @then {@link ValidationService} performs correct distributions
+   */
+  @Test
+  void wildDistributionProportions() throws InterruptedException {
+    // projectOwner is a json setter
+    final Map<String, BigDecimal> proportionsMap = new HashMap<>();
+    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.000000142327463691"));
+    final BigDecimal totalSupply = new BigDecimal("12837.0638633542");
+    final SoraDistributionProportions proportions = new SoraDistributionProportions(
+        proportionsMap,
+        totalSupply
+    );
+
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+
+    irohaAPI.transaction(
+        Transaction.builder(validatorId)
+            .addAssetQuantity(assetId, new BigDecimal("0.401821373642362953"))
+            .sign(validatorKeypair)
+            .build()
+    ).blockingLast();
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerId)
+            .addAssetQuantity(assetId, totalSupply.add(BigDecimal.ONE))
+            .setAccountDetail(
+                projectOwnerId,
+                DISTRIBUTION_PROPORTIONS_KEY,
+                Utils.irohaEscape(gson.toJson(proportions))
+            )
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    final BigDecimal firstAmount = new BigDecimal("2837.0638633542026");
+    final BigDecimal feeAmount = new BigDecimal("0.1");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerId)
+            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 1", firstAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("0.000402383062110052"));
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal secondAmount = new BigDecimal("4000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerId)
+            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 2", secondAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("0.000567900812873459"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal thirdAmount = new BigDecimal("3000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerId)
+            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 3", thirdAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("0.000425573349182459"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal fourthAmount = new BigDecimal("2999.6");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerId)
+            .transferAsset(projectOwnerId, receiverId, assetId, "perevod nomer 4", fourthAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("0.000425516418196983"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+  }
+
   private BigDecimal getBalance(String accountId) {
     return new BigDecimal(queryAPI.getAccountAssets(accountId)
         .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
