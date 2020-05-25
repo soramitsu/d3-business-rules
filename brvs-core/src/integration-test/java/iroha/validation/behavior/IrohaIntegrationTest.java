@@ -765,7 +765,7 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
-            .addAssetQuantity(assetId, new BigDecimal("1000"))
+            .addAssetQuantity(assetId, new BigDecimal("1001"))
             .sign(validatorKeypair)
             .build()
     ).blockingLast();
@@ -829,8 +829,7 @@ public class IrohaIntegrationTest {
     assertNotNull(remaining);
     assertEquals(
         0,
-        remaining.add(initialBrvsBalance)
-            .compareTo(brvsBalanceAfterTransfer.subtract(new BigDecimal("600")))
+        remaining.compareTo(new BigDecimal("400"))
     );
 
     final BigDecimal secondAmount = firstAmount;
