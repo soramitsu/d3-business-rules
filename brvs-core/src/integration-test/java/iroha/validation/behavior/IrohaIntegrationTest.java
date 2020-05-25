@@ -765,7 +765,7 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
-            .addAssetQuantity(assetId, new BigDecimal("1100"))
+            .addAssetQuantity(assetId, new BigDecimal("1000"))
             .sign(validatorKeypair)
             .build()
     ).blockingLast();
