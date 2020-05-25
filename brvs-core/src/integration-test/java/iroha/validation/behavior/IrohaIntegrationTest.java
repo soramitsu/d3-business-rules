@@ -8,6 +8,7 @@ package iroha.validation.behavior;
 import static iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider.ACCOUNT_PLACEHOLDER;
 import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_FINISHED_KEY;
 import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_PROPORTIONS_KEY;
+import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_REMAINING_KEY;
 import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
 import static iroha.validation.utils.ValidationUtils.crypto;
 import static iroha.validation.utils.ValidationUtils.gson;
@@ -46,6 +47,7 @@ import iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionFinished;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionProportions;
+import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionRemaining;
 import iroha.validation.transactions.provider.impl.AccountManager;
 import iroha.validation.transactions.provider.impl.BasicTransactionProvider;
 import iroha.validation.transactions.provider.impl.util.BrvsData;
@@ -227,6 +229,7 @@ public class IrohaIntegrationTest {
                     userDomainName,
                     projectSetterKeypair.getPublic()
                 )
+                .addAssetQuantity(assetId, "1")
                 // transactions in genesis block can be unsigned
                 .build()
                 .build()
@@ -758,6 +761,7 @@ public class IrohaIntegrationTest {
     BigDecimal oneBalance = getBalance(projectParticipantOneId);
     BigDecimal twoBalance = getBalance(projectParticipantTwoId);
     BigDecimal threeBalance = getBalance(projectParticipantThreeId);
+    final BigDecimal initialBrvsBalance = getBalance(validatorId);
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
@@ -779,6 +783,7 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
 
+    final BigDecimal brvsBalanceAfterTransfer = getBalance(validatorId);
     final BigDecimal firstAmount = new BigDecimal("60000");
 
     irohaAPI.transaction(
@@ -788,7 +793,7 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
 
-    Thread.sleep(5000);
+    Thread.sleep(25000);
 
     assertEquals(
         0,
@@ -812,6 +817,21 @@ public class IrohaIntegrationTest {
 
     assertNotNull(finished);
     assertFalse(finished.getFinished());
+
+    final BigDecimal remaining = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_REMAINING_KEY,
+        SoraDistributionRemaining.class
+    ).getRemaining();
+
+    assertNotNull(remaining);
+    assertEquals(
+        0,
+        remaining.add(initialBrvsBalance)
+            .compareTo(brvsBalanceAfterTransfer.subtract(new BigDecimal("600")))
+    );
 
     final BigDecimal secondAmount = firstAmount;
 
@@ -849,6 +869,17 @@ public class IrohaIntegrationTest {
 
     assertNotNull(finishedNow);
     assertTrue(finishedNow.getFinished());
+
+    final BigDecimal remainingNow = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_REMAINING_KEY,
+        SoraDistributionRemaining.class
+    ).getRemaining();
+
+    assertNotNull(remainingNow);
+    assertEquals(0, remainingNow.compareTo(BigDecimal.ZERO));
   }
 
   /**
@@ -1039,6 +1070,17 @@ public class IrohaIntegrationTest {
         0,
         oneBalance.compareTo(getBalance(projectParticipantOneId))
     );
+
+    final SoraDistributionFinished finishedNow = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerThreeId,
+        validatorId,
+        DISTRIBUTION_FINISHED_KEY,
+        SoraDistributionFinished.class
+    );
+
+    assertNotNull(finishedNow);
+    assertTrue(finishedNow.getFinished());
   }
 
   private BigDecimal getBalance(String accountId) {
