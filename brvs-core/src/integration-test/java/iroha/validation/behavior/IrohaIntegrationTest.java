@@ -793,7 +793,7 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
 
-    Thread.sleep(25000);
+    Thread.sleep(5000);
 
     assertEquals(
         0,
