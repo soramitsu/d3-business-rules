@@ -47,7 +47,6 @@ import iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionFinished;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionProportions;
-import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionRemaining;
 import iroha.validation.transactions.provider.impl.AccountManager;
 import iroha.validation.transactions.provider.impl.BasicTransactionProvider;
 import iroha.validation.transactions.provider.impl.util.BrvsData;
@@ -761,7 +760,6 @@ public class IrohaIntegrationTest {
     BigDecimal oneBalance = getBalance(projectParticipantOneId);
     BigDecimal twoBalance = getBalance(projectParticipantTwoId);
     BigDecimal threeBalance = getBalance(projectParticipantThreeId);
-    final BigDecimal initialBrvsBalance = getBalance(validatorId);
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
@@ -783,7 +781,6 @@ public class IrohaIntegrationTest {
             .build()
     ).blockingLast();
 
-    final BigDecimal brvsBalanceAfterTransfer = getBalance(validatorId);
     final BigDecimal firstAmount = new BigDecimal("60000");
 
     irohaAPI.transaction(
@@ -823,8 +820,8 @@ public class IrohaIntegrationTest {
         projectOwnerOneId,
         validatorId,
         DISTRIBUTION_REMAINING_KEY,
-        SoraDistributionRemaining.class
-    ).getRemaining();
+        BigDecimal.class
+    );
 
     assertNotNull(remaining);
     assertEquals(
@@ -874,8 +871,8 @@ public class IrohaIntegrationTest {
         projectOwnerOneId,
         validatorId,
         DISTRIBUTION_REMAINING_KEY,
-        SoraDistributionRemaining.class
-    ).getRemaining();
+        BigDecimal.class
+    );
 
     assertNotNull(remainingNow);
     assertEquals(0, remainingNow.compareTo(BigDecimal.ZERO));
