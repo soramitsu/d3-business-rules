@@ -243,8 +243,8 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         final String newLimitValue = newDetails.get(LIMIT_AMOUNT_KEY);
         final Transaction transaction = jp.co.soramitsu.iroha.java.Transaction
             .builder(queryAPI.getAccountId())
-            .setAccountDetail(limitHolderAccount, LIMIT_AMOUNT_KEY, newLimitValue)
             .setAccountDetail(limitHolderAccount, LIMIT_TIME_KEY, newTimeDue)
+            .setAccountDetail(limitHolderAccount, LIMIT_AMOUNT_KEY, newLimitValue)
             .sign(queryAPI.getKeyPair())
             .build();
         TxStatus txStatus = sendWithLastResponseWaiting(
@@ -276,6 +276,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
       final long timestampDue = currentLimits.getTimestampDue();
       final Transaction transaction = jp.co.soramitsu.iroha.java.Transaction
           .builder(queryAPI.getAccountId())
+          .setAccountDetail(limitHolderAccount, LIMIT_TIME_KEY, String.valueOf(timestampDue))
           .setAccountDetail(limitHolderAccount, LIMIT_AMOUNT_KEY, remaining.toPlainString())
           .sign(queryAPI.getKeyPair())
           .build();
