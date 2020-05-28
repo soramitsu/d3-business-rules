@@ -6,6 +6,7 @@
 package iroha.validation.transactions.plugin.impl.sora;
 
 import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
+import static iroha.validation.utils.ValidationUtils.gson;
 import static iroha.validation.utils.ValidationUtils.trackHashWithLastResponseWaiting;
 
 import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
@@ -17,7 +18,6 @@ import iroha.validation.rules.impl.billing.BillingInfo.BillingTypeEnum;
 import iroha.validation.rules.impl.billing.BillingRule;
 import iroha.validation.transactions.plugin.PluggableLogic;
 import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionInputContext;
-import iroha.validation.utils.ValidationUtils;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -49,13 +49,13 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       .getLogger(SoraDistributionPluggableLogic.class);
   public static final String DISTRIBUTION_PROPORTIONS_KEY = "distribution";
   public static final String DISTRIBUTION_FINISHED_KEY = "distribution_finished";
+  public static final String DISTRIBUTION_REMAINING_KEY = "distribution_remaining";
   private static final String SORA_DOMAIN = "sora";
   private static final String XOR_ASSET_ID = "xor#" + SORA_DOMAIN;
   private static final int XOR_PRECISION = 18;
-  private static final RoundingMode XOR_ROUNDING_MODE = RoundingMode.DOWN;
   private static final MathContext XOR_MATH_CONTEXT = new MathContext(
       Integer.MAX_VALUE,
-      XOR_ROUNDING_MODE
+      RoundingMode.DOWN
   );
   private static final int TRANSACTION_SIZE = 9999;
   private static final String DESCRIPTION_FORMAT = "Distribution from %s";
@@ -240,7 +240,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
           suppliesLeft = constructInitialAmountMap(initialProportions);
         }
         final SoraDistributionProportions finalSuppliesLeft = suppliesLeft;
-        final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE);
+        final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE, false);
         // <String -> Amount> map for the project client accounts
         final Map<String, BigDecimal> toDistributeMap = initialProportions.accountProportions
             .entrySet()
@@ -256,6 +256,20 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                     )
                 )
             );
+        BigDecimal soraDistributionRemaining = queryRemainingBalance(
+            projectOwnerAccountId
+        );
+        // if brvs hasn't set remaining value yet
+        if (soraDistributionRemaining.signum() == -1) {
+          logger.info("BRVS distribution balance remains haven't been set yet for {}",
+              projectOwnerAccountId);
+          soraDistributionRemaining = multiplyWithRespect(
+              initialProportions.totalSupply,
+              initialProportions.accountProportions.values().stream().reduce(BigDecimal::add)
+                  .orElse(BigDecimal.ZERO),
+              true
+          );
+        }
         transactionMap.merge(
             projectOwnerAccountId,
             constructTransactions(
@@ -265,7 +279,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                 toDistributeMap,
                 initialProportions,
                 fee,
-                soraDistributionInputContext.timestamp
+                soraDistributionInputContext.timestamp,
+                soraDistributionRemaining
             ),
             this::mergeLists
         );
@@ -324,10 +339,11 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       Map<String, BigDecimal> toDistributeMap,
       SoraDistributionProportions initialProportions,
       BigDecimal fee,
-      long creationTime) {
+      long creationTime,
+      BigDecimal soraDistributionRemaining) {
     int commandCounter = 0;
     final List<Transaction> transactionList = new ArrayList<>();
-    final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE);
+    final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE, false);
     final SoraDistributionProportions afterDistribution = getSuppliesLeftAfterDistributions(
         supplies,
         transferAmount,
@@ -355,6 +371,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
             creationTime
         )
     );
+    soraDistributionRemaining = soraDistributionRemaining.subtract(fee);
     TransactionBuilder transactionBuilder = jp.co.soramitsu.iroha.java.Transaction
         .builder(brvsAccountId, creationTime);
     // In case it is going to finish, add all amounts left
@@ -366,6 +383,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     for (Map.Entry<String, BigDecimal> entry : toDistributeMap.entrySet()) {
       final BigDecimal amount = entry.getValue();
       if (amount.signum() == 1) {
+        soraDistributionRemaining = soraDistributionRemaining.subtract(amount);
         appendDistributionCommand(
             projectOwnerAccountId,
             entry.getKey(),
@@ -383,6 +401,23 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     if (commandCounter > 0) {
       transactionList.add(transactionBuilder.build().build());
     }
+    // In case it is going to finish, burn remains
+    if (soraDistributionFinished.finished && soraDistributionRemaining.signum() == 1) {
+      transactionList.add(
+          constructBurnRemainsTransaction(
+              soraDistributionRemaining,
+              creationTime
+          )
+      );
+      soraDistributionRemaining = BigDecimal.ZERO;
+    }
+    transactionList.add(
+        constructRemainsDetailTransaction(
+            projectOwnerAccountId,
+            soraDistributionRemaining,
+            creationTime
+        )
+    );
     logger.debug("Constrtucted project distribution transactions: count - {}",
         transactionList.size()
     );
@@ -425,14 +460,14 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
             projectOwnerAccountId,
             DISTRIBUTION_PROPORTIONS_KEY,
             Utils.irohaEscape(
-                ValidationUtils.gson.toJson(suppliesLeftAfterDistributions)
+                gson.toJson(suppliesLeftAfterDistributions)
             )
         )
         .setAccountDetail(
             projectOwnerAccountId,
             DISTRIBUTION_FINISHED_KEY,
             Utils.irohaEscape(
-                ValidationUtils.gson.toJson(soraDistributionFinished)
+                gson.toJson(soraDistributionFinished)
             )
         )
         .sign(brvsKeypair)
@@ -444,6 +479,26 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         .subtractAssetQuantity(
             XOR_ASSET_ID,
             amount
+        )
+        .sign(brvsKeypair)
+        .build();
+  }
+
+  private Transaction constructBurnRemainsTransaction(BigDecimal amount, long creationTime) {
+    logger.info("Going to burn remaining ditstibution balance {}", amount.toPlainString());
+    // for now the same
+    return constructFeeTransaction(amount, creationTime);
+  }
+
+  private Transaction constructRemainsDetailTransaction(
+      String projectOwnerAccountId,
+      BigDecimal amount,
+      long creationTime) {
+    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId, creationTime)
+        .setAccountDetail(
+            projectOwnerAccountId,
+            DISTRIBUTION_REMAINING_KEY,
+            amount.toPlainString()
         )
         .sign(brvsKeypair)
         .build();
@@ -468,7 +523,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                   }
                   final BigDecimal feeSubtrahend = multiplyWithRespect(
                       initialProportions.accountProportions.get(entry.getKey()),
-                      fee
+                      fee,
+                      false
                   ).add(subtrahend);
                   return entry.getValue().subtract(feeSubtrahend).max(BigDecimal.ZERO);
                 }
@@ -497,7 +553,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         .collect(
             Collectors.toMap(
                 Entry::getKey,
-                entry -> multiplyWithRespect(totalSupply, entry.getValue())
+                entry -> multiplyWithRespect(totalSupply, entry.getValue(), true)
             )
         );
 
@@ -514,12 +570,13 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       BigDecimal fee) {
     final BigDecimal calculated = multiplyWithRespect(
         transferAmount,
-        percentage
+        percentage,
+        true
     );
     if (leftToDistribute == null) {
       return calculated;
     }
-    return calculated.min(leftToDistribute).subtract(multiplyWithRespect(fee, percentage));
+    return calculated.min(leftToDistribute).subtract(multiplyWithRespect(fee, percentage, false));
   }
 
   private SoraDistributionProportions queryProportionsForAccount(String accountId) {
@@ -538,6 +595,16 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     );
   }
 
+  private BigDecimal queryRemainingBalance(String accountId) {
+    return new BigDecimal(
+        irohaQueryHelper.getAccountDetails(
+            accountId,
+            brvsAccountId,
+            DISTRIBUTION_REMAINING_KEY
+        ).get().orElse("-1")
+    );
+  }
+
   private SoraDistributionFinished queryDistributionsFinishedForAccount(String accountId) {
     return advancedQueryAccountDetails(
         queryAPI,
@@ -548,9 +615,12 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     );
   }
 
-  private BigDecimal multiplyWithRespect(BigDecimal value, BigDecimal multiplicand) {
+  private BigDecimal multiplyWithRespect(
+      BigDecimal value,
+      BigDecimal multiplicand,
+      boolean roundDown) {
     return value.multiply(multiplicand, XOR_MATH_CONTEXT)
-        .setScale(XOR_PRECISION, XOR_ROUNDING_MODE);
+        .setScale(XOR_PRECISION, roundDown ? RoundingMode.DOWN : RoundingMode.UP);
   }
 
   public static class SoraDistributionProportions {
