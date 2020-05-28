@@ -256,20 +256,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                     )
                 )
             );
-        BigDecimal soraDistributionRemaining = queryRemainingBalance(
-            projectOwnerAccountId
-        );
-        // if brvs hasn't set remaining value yet
-        if (soraDistributionRemaining.signum() == -1) {
-          logger.info("BRVS distribution balance remains haven't been set yet for {}",
-              projectOwnerAccountId);
-          soraDistributionRemaining = multiplyWithRespect(
-              initialProportions.totalSupply,
-              initialProportions.accountProportions.values().stream().reduce(BigDecimal::add)
-                  .orElse(BigDecimal.ZERO),
-              true
-          );
-        }
+
         transactionMap.merge(
             projectOwnerAccountId,
             constructTransactions(
@@ -279,8 +266,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                 toDistributeMap,
                 initialProportions,
                 fee,
-                soraDistributionInputContext.timestamp,
-                soraDistributionRemaining
+                soraDistributionInputContext.timestamp
             ),
             this::mergeLists
         );
@@ -339,8 +325,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       Map<String, BigDecimal> toDistributeMap,
       SoraDistributionProportions initialProportions,
       BigDecimal fee,
-      long creationTime,
-      BigDecimal soraDistributionRemaining) {
+      long creationTime) {
     int commandCounter = 0;
     final List<Transaction> transactionList = new ArrayList<>();
     final BigDecimal multipliedFee = multiplyWithRespect(fee, FEE_RATE, false);
@@ -358,20 +343,12 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
             )
     );
     transactionList.add(
-        constructDetailTransaction(
-            projectOwnerAccountId,
-            afterDistribution,
-            soraDistributionFinished,
-            creationTime
-        )
-    );
-    transactionList.add(
         constructFeeTransaction(
             fee,
             creationTime
         )
     );
-    soraDistributionRemaining = soraDistributionRemaining.subtract(fee);
+    afterDistribution.rewardToDistribute = afterDistribution.rewardToDistribute.subtract(fee);
     TransactionBuilder transactionBuilder = jp.co.soramitsu.iroha.java.Transaction
         .builder(brvsAccountId, creationTime);
     // In case it is going to finish, add all amounts left
@@ -383,7 +360,7 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     for (Map.Entry<String, BigDecimal> entry : toDistributeMap.entrySet()) {
       final BigDecimal amount = entry.getValue();
       if (amount.signum() == 1) {
-        soraDistributionRemaining = soraDistributionRemaining.subtract(amount);
+        afterDistribution.rewardToDistribute = afterDistribution.rewardToDistribute.subtract(amount);
         appendDistributionCommand(
             projectOwnerAccountId,
             entry.getKey(),
@@ -402,19 +379,20 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       transactionList.add(transactionBuilder.build().build());
     }
     // In case it is going to finish, burn remains
-    if (soraDistributionFinished.finished && soraDistributionRemaining.signum() == 1) {
+    if (soraDistributionFinished.finished && afterDistribution.rewardToDistribute.signum() == 1) {
       transactionList.add(
           constructBurnRemainsTransaction(
-              soraDistributionRemaining,
+              afterDistribution.rewardToDistribute,
               creationTime
           )
       );
-      soraDistributionRemaining = BigDecimal.ZERO;
+      afterDistribution.rewardToDistribute = BigDecimal.ZERO;
     }
     transactionList.add(
-        constructRemainsDetailTransaction(
+        constructDetailTransaction(
             projectOwnerAccountId,
-            soraDistributionRemaining,
+            afterDistribution,
+            soraDistributionFinished,
             creationTime
         )
     );
@@ -535,7 +513,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         supplyWithdrawn.signum() == -1 ? BigDecimal.ZERO : supplyWithdrawn;
     return new SoraDistributionProportions(
         resultingSuppliesMap,
-        supplyLeft
+        supplyLeft,
+        supplies.rewardToDistribute
     );
   }
 
@@ -559,7 +538,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
 
     return new SoraDistributionProportions(
         decimalMap,
-        totalSupply
+        totalSupply,
+        initialProportion.rewardToDistribute
     );
   }
 
@@ -629,12 +609,15 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     // Account -> left in absolute measure from BRVS
     protected Map<String, BigDecimal> accountProportions;
     protected BigDecimal totalSupply;
+    protected BigDecimal rewardToDistribute;
 
     public SoraDistributionProportions(
         Map<String, BigDecimal> accountProportions,
-        BigDecimal totalSupply) {
+        BigDecimal totalSupply,
+        BigDecimal rewardToDistribute) {
       this.accountProportions = accountProportions;
       this.totalSupply = totalSupply;
+      this.rewardToDistribute = rewardToDistribute;
     }
   }
 
