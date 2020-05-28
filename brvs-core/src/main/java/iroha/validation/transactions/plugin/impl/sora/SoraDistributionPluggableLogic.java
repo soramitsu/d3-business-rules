@@ -49,7 +49,6 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       .getLogger(SoraDistributionPluggableLogic.class);
   public static final String DISTRIBUTION_PROPORTIONS_KEY = "distribution";
   public static final String DISTRIBUTION_FINISHED_KEY = "distribution_finished";
-  public static final String DISTRIBUTION_REMAINING_KEY = "distribution_remaining";
   private static final String SORA_DOMAIN = "sora";
   private static final String XOR_ASSET_ID = "xor#" + SORA_DOMAIN;
   private static final int XOR_PRECISION = 18;
@@ -360,7 +359,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     for (Map.Entry<String, BigDecimal> entry : toDistributeMap.entrySet()) {
       final BigDecimal amount = entry.getValue();
       if (amount.signum() == 1) {
-        afterDistribution.rewardToDistribute = afterDistribution.rewardToDistribute.subtract(amount);
+        afterDistribution.rewardToDistribute = afterDistribution.rewardToDistribute
+            .subtract(amount);
         appendDistributionCommand(
             projectOwnerAccountId,
             entry.getKey(),
@@ -468,20 +468,6 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     return constructFeeTransaction(amount, creationTime);
   }
 
-  private Transaction constructRemainsDetailTransaction(
-      String projectOwnerAccountId,
-      BigDecimal amount,
-      long creationTime) {
-    return jp.co.soramitsu.iroha.java.Transaction.builder(brvsAccountId, creationTime)
-        .setAccountDetail(
-            projectOwnerAccountId,
-            DISTRIBUTION_REMAINING_KEY,
-            amount.toPlainString()
-        )
-        .sign(brvsKeypair)
-        .build();
-  }
-
   private SoraDistributionProportions getSuppliesLeftAfterDistributions(
       SoraDistributionProportions supplies,
       BigDecimal transferAmount,
@@ -575,16 +561,6 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
     );
   }
 
-  private BigDecimal queryRemainingBalance(String accountId) {
-    return new BigDecimal(
-        irohaQueryHelper.getAccountDetails(
-            accountId,
-            brvsAccountId,
-            DISTRIBUTION_REMAINING_KEY
-        ).get().orElse("-1")
-    );
-  }
-
   private SoraDistributionFinished queryDistributionsFinishedForAccount(String accountId) {
     return advancedQueryAccountDetails(
         queryAPI,
@@ -618,6 +594,10 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
       this.accountProportions = accountProportions;
       this.totalSupply = totalSupply;
       this.rewardToDistribute = rewardToDistribute;
+    }
+
+    public BigDecimal getRewardToDistribute() {
+      return rewardToDistribute;
     }
   }
 

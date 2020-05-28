@@ -8,7 +8,6 @@ package iroha.validation.behavior;
 import static iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider.ACCOUNT_PLACEHOLDER;
 import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_FINISHED_KEY;
 import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_PROPORTIONS_KEY;
-import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_REMAINING_KEY;
 import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
 import static iroha.validation.utils.ValidationUtils.crypto;
 import static iroha.validation.utils.ValidationUtils.gson;
@@ -751,9 +750,11 @@ public class IrohaIntegrationTest {
     proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
     proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
     final BigDecimal totalSupply = new BigDecimal("100000");
+    final BigDecimal rewardToDistribute = new BigDecimal("1001");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
-        totalSupply
+        totalSupply,
+        rewardToDistribute
     );
     final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
 
@@ -819,9 +820,9 @@ public class IrohaIntegrationTest {
         queryAPI,
         projectOwnerOneId,
         validatorId,
-        DISTRIBUTION_REMAINING_KEY,
-        BigDecimal.class
-    );
+        DISTRIBUTION_PROPORTIONS_KEY,
+        SoraDistributionProportions.class
+    ).getRewardToDistribute();
 
     assertNotNull(remaining);
     assertEquals(
@@ -870,9 +871,9 @@ public class IrohaIntegrationTest {
         queryAPI,
         projectOwnerOneId,
         validatorId,
-        DISTRIBUTION_REMAINING_KEY,
-        BigDecimal.class
-    );
+        DISTRIBUTION_PROPORTIONS_KEY,
+        SoraDistributionProportions.class
+    ).getRewardToDistribute();
 
     assertNotNull(remainingNow);
     assertEquals(0, remainingNow.compareTo(BigDecimal.ZERO));
@@ -893,9 +894,11 @@ public class IrohaIntegrationTest {
     proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
     proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
     final BigDecimal totalSupply = new BigDecimal("100000");
+    final BigDecimal rewardToDistribute = new BigDecimal("1000");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
-        totalSupply
+        totalSupply,
+        rewardToDistribute
     );
 
     BigDecimal oneBalance = getBalance(projectParticipantOneId);
@@ -962,16 +965,18 @@ public class IrohaIntegrationTest {
     final Map<String, BigDecimal> proportionsMap = new HashMap<>();
     proportionsMap.put(projectParticipantOneId, new BigDecimal("0.000000142327463691"));
     final BigDecimal totalSupply = new BigDecimal("12837.0638633542");
+    final BigDecimal rewardToDistribute = new BigDecimal("0.401821373642362953");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
-        totalSupply
+        totalSupply,
+        rewardToDistribute
     );
 
     BigDecimal oneBalance = getBalance(projectParticipantOneId);
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
-            .addAssetQuantity(assetId, new BigDecimal("0.401821373642362953"))
+            .addAssetQuantity(assetId, rewardToDistribute)
             .sign(validatorKeypair)
             .build()
     ).blockingLast();
