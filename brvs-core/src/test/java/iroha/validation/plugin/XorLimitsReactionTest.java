@@ -78,6 +78,7 @@ public class XorLimitsReactionTest {
     when(transferAsset.getAssetId()).thenReturn(ASSET_ID);
     when(transferAsset.getAmount()).thenReturn(newLimit.toPlainString());
     when(transferAsset.getDestAccountId()).thenReturn(USER_ID);
+    when(transferAsset.getSrcAccountId()).thenReturn(USER_ID);
 
     when(commandTime.hasCompareAndSetAccountDetail()).thenReturn(true);
     when(commandTime.getCompareAndSetAccountDetail()).thenReturn(compareAndSetAccountDetail);
