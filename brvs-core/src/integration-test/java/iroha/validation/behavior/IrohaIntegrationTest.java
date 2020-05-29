@@ -750,7 +750,7 @@ public class IrohaIntegrationTest {
     proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
     proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
     final BigDecimal totalSupply = new BigDecimal("100000");
-    final BigDecimal rewardToDistribute = new BigDecimal("1001");
+    final BigDecimal rewardToDistribute = new BigDecimal("1000");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
         totalSupply,
