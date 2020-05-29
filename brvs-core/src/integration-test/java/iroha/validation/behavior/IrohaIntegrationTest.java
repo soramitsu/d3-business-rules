@@ -764,6 +764,7 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
+            .subtractAssetQuantity(assetId, getBalance(validatorId))
             .addAssetQuantity(assetId, new BigDecimal("1001"))
             .sign(validatorKeypair)
             .build()
@@ -907,6 +908,7 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
+            .subtractAssetQuantity(assetId, getBalance(validatorId))
             .addAssetQuantity(assetId, BigDecimal.ONE)
             .sign(validatorKeypair)
             .build()
@@ -976,6 +978,7 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transaction(
         Transaction.builder(validatorId)
+            .subtractAssetQuantity(assetId, getBalance(validatorId))
             .addAssetQuantity(assetId, rewardToDistribute)
             .sign(validatorKeypair)
             .build()
