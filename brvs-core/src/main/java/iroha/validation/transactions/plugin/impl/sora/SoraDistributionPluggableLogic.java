@@ -503,7 +503,6 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                   final BigDecimal subtractedFromUser = entry.getValue()
                       .subtract(subtrahend)
                       .subtract(feesByUsers.get(userId));
-
                   return subtractedFromUser.max(BigDecimal.ZERO);
                 }
             )
