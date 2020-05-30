@@ -94,7 +94,7 @@ public class IrohaIntegrationTest {
   private static final GenericContainer mongo = new GenericContainer<>("mongo:4.0.6")
       .withExposedPorts(27017);
   private static final GenericContainer chainAdapter = new GenericContainer<>(
-      "nexus.iroha.tech:19002/d3-deploy/chain-adapter:latest");
+      "docker.soramitsu.co.jp/soramitsu/chain-adapter:latest");
   private static final WaitForTerminalStatus terminalStrategy = new WaitForTerminalStatus(
       Arrays.asList(
           TxStatus.COMMITTED,
