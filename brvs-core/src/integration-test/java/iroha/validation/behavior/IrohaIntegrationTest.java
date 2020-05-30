@@ -967,7 +967,7 @@ public class IrohaIntegrationTest {
     final Map<String, BigDecimal> proportionsMap = new HashMap<>();
     proportionsMap.put(projectParticipantOneId, new BigDecimal("0.000000142327463691"));
     final BigDecimal totalSupply = new BigDecimal("12837.0638633542");
-    final BigDecimal rewardToDistribute = new BigDecimal("0.401821373642362953");
+    final BigDecimal rewardToDistribute = new BigDecimal("0.001821373642362953");
     final SoraDistributionProportions proportions = new SoraDistributionProportions(
         proportionsMap,
         totalSupply,

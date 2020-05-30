@@ -500,11 +500,10 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
                   if (subtrahend == null) {
                     subtrahend = BigDecimal.ZERO;
                   }
-                  final BigDecimal feeSubtrahend = feesByUsers.get(userId).add(subtrahend);
-                  final BigDecimal subtractedFromUser = entry.getValue().subtract(feeSubtrahend);
-                  if (subtractedFromUser.signum() == -1) {
-                    toDistributeMap.put(userId, BigDecimal.ZERO);
-                  }
+                  final BigDecimal subtractedFromUser = entry.getValue()
+                      .subtract(subtrahend)
+                      .subtract(feesByUsers.get(userId));
+
                   return subtractedFromUser.max(BigDecimal.ZERO);
                 }
             )
@@ -556,12 +555,35 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         percentage,
         true
     );
-    BigDecimal feeSubtrahend = multiplyWithRespect(fee, percentage, false);
-    feesByUsers.put(userId, feeSubtrahend);
+    final BigDecimal feeSubtrahend = multiplyWithRespect(fee, percentage, false);
     if (leftToDistribute == null) {
-      return calculated.subtract(feeSubtrahend);
+      return checkAndReturnToDistributeAmount(
+          calculated,
+          feeSubtrahend,
+          userId,
+          feesByUsers
+      );
     }
-    return calculated.min(leftToDistribute).subtract(feeSubtrahend);
+    return checkAndReturnToDistributeAmount(
+        calculated.min(leftToDistribute),
+        feeSubtrahend,
+        userId,
+        feesByUsers
+    );
+  }
+
+  private BigDecimal checkAndReturnToDistributeAmount(
+      BigDecimal calculated,
+      BigDecimal feeSubtrahend,
+      String userId,
+      Map<String, BigDecimal> feesByUsers) {
+    final BigDecimal toDistribute = calculated.subtract(feeSubtrahend);
+    if (toDistribute.signum() == -1) {
+      feesByUsers.put(userId, feeSubtrahend.subtract(calculated));
+      return BigDecimal.ZERO;
+    }
+    feesByUsers.put(userId, feeSubtrahend);
+    return toDistribute;
   }
 
   private SoraDistributionProportions queryProportionsForAccount(String accountId) {
