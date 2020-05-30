@@ -555,16 +555,8 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         true
     );
     final BigDecimal feeSubtrahend = multiplyWithRespect(fee, percentage, false);
-    if (leftToDistribute == null) {
-      return checkAndReturnToDistributeAmount(
-          calculated,
-          feeSubtrahend,
-          userId,
-          feesByUsers
-      );
-    }
     return checkAndReturnToDistributeAmount(
-        calculated.min(leftToDistribute),
+        Optional.ofNullable(leftToDistribute).map(calculated::min).orElse(calculated),
         feeSubtrahend,
         userId,
         feesByUsers
