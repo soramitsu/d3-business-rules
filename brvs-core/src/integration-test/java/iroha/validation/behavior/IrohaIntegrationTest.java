@@ -912,7 +912,7 @@ public class IrohaIntegrationTest {
 
     final TransactionBuilder transaction = Transaction
         .builder(validatorId)
-        .addAssetQuantity(assetId, rewardToDistribute);
+        .addAssetQuantity(assetId, BigDecimal.ONE);
     final BigDecimal validatorBalance = getBalance(validatorId);
     if (validatorBalance.signum() == 1) {
       transaction.subtractAssetQuantity(assetId, validatorBalance);
