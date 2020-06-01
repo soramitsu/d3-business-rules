@@ -106,10 +106,12 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
         irohaQueryHelper,
         this.limitSetterAccount
     );
+
     final long brvsLastTimestampDue = getTimestampFrom(
         irohaQueryHelper,
         this.queryAPI.getAccountId()
     );
+
     final BigDecimal brvsRemaining = getLimitFrom(
         irohaQueryHelper,
         this.queryAPI.getAccountId()
