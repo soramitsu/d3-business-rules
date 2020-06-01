@@ -459,14 +459,6 @@ public class SoraDistributionPluggableLogic extends PluggableLogic<SoraDistribut
         .build();
   }
 
-  private BigDecimal calculateValuesSum(Map<String, BigDecimal> map) {
-    return map
-        .values()
-        .stream()
-        .reduce(BigDecimal::add)
-        .orElse(BigDecimal.ZERO);
-  }
-
   private Transaction constructFeeTransaction(BigDecimal fee, long creationTime) {
     if (fee.signum() < 1) {
       logger.warn("Got negative value for subtraction");
