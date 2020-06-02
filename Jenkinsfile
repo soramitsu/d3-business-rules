@@ -2,6 +2,6 @@
 new org.bakong.mainLibrary().call(
     registry:'https://docker.soramitsu.co.jp',
     nexusUserId: 'bot-soranet-rw', 
-    credentialsForTests: 'bot-soranet-ro',
+    registryCredentialsForTests: 'bot-soranet-ro',
     dockerTags: ['master': 'latest', 'develop': 'develop']
 )
