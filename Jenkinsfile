@@ -1,4 +1,4 @@
-@Library('jenkins-library@feature/registryForTests' ) _
+@Library('jenkins-library' ) _
 new org.bakong.mainLibrary().call(
     registry:'https://docker.soramitsu.co.jp',
     nexusUserId: 'bot-soranet-rw', 
