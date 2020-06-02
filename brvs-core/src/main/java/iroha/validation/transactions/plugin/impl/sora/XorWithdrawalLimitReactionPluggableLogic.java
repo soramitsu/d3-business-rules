@@ -48,6 +48,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
   public static final String LIMIT_AMOUNT_KEY = "withdrawal_limit";
 
   private final QueryAPI queryAPI;
+  private final IrohaQueryHelper irohaQueryHelper;
   private final String limitHolderAccount;
   private final String limitSetterAccount;
   private final AtomicReference<XorWithdrawalLimitRemainder> xorWithdrawalLimitRemainder;
@@ -96,35 +97,47 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
     }
 
     this.queryAPI = queryAPI;
+    this.irohaQueryHelper = irohaQueryHelper;
     this.limitHolderAccount = limitHolderAccount;
     this.limitSetterAccount = limitSetterAccount;
     this.xorWithdrawalLimitRemainder = xorWithdrawalLimitRemainder;
     this.withdrawalAccountId = withdrawalAccountId;
     this.registrationProvider = registrationProvider;
 
+    requestIrohaLimitsAndPerformUpdate();
+  }
+
+  private void requestIrohaLimitsAndPerformUpdate() {
     final long timestampDue = getTimestampFrom(
         irohaQueryHelper,
         this.limitSetterAccount
     );
+
     final long brvsLastTimestampDue = getTimestampFrom(
         irohaQueryHelper,
         this.queryAPI.getAccountId()
     );
-    final BigDecimal brvsWithdrawalsSum = getLimitFrom(
-        irohaQueryHelper,
-        this.queryAPI.getAccountId()
-    );
 
-    final BigDecimal amountRemaining = getLimitFrom(
+    final BigDecimal brvsRemaining = getRelevantBrvsRemaining();
+
+    final BigDecimal amountRemaining = timestampDue == brvsLastTimestampDue ?
+        brvsRemaining : getLimitFrom(
         irohaQueryHelper,
         this.limitSetterAccount
-    ).subtract(timestampDue == brvsLastTimestampDue ? brvsWithdrawalsSum : BigDecimal.ZERO);
+    );
 
     updateWithdrawalLimits(
         new XorWithdrawalLimitRemainder(
             amountRemaining,
             timestampDue
         )
+    );
+  }
+
+  private BigDecimal getRelevantBrvsRemaining() {
+    return getLimitFrom(
+        irohaQueryHelper,
+        this.queryAPI.getAccountId()
     );
   }
 
@@ -223,6 +236,9 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
   }
 
   private void updateWithdrawalLimits(XorWithdrawalLimitRemainder xorWithdrawalLimitRemainder) {
+    if (xorWithdrawalLimitRemainder.getAmountRemaining().signum() == -1) {
+      xorWithdrawalLimitRemainder.setAmountRemaining(BigDecimal.ZERO);
+    }
     this.xorWithdrawalLimitRemainder.set(xorWithdrawalLimitRemainder);
     logger.info("Updated withdrawal limits: " +
         xorWithdrawalLimitRemainder.getAmountRemaining().toPlainString() +
@@ -272,7 +288,7 @@ public class XorWithdrawalLimitReactionPluggableLogic extends
     if (withdrawalsAmount.compareTo(BigDecimal.ZERO) > 0) {
       logger.info("Got committed withdrawal limit transaction update");
       final XorWithdrawalLimitRemainder currentLimits = this.xorWithdrawalLimitRemainder.get();
-      final BigDecimal remaining = currentLimits.getAmountRemaining().subtract(withdrawalsAmount);
+      final BigDecimal remaining = getRelevantBrvsRemaining().subtract(withdrawalsAmount);
       final long timestampDue = currentLimits.getTimestampDue();
       final Transaction transaction = jp.co.soramitsu.iroha.java.Transaction
           .builder(queryAPI.getAccountId())
