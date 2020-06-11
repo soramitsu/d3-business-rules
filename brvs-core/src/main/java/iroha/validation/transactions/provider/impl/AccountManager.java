@@ -420,12 +420,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
   public void close() {
     executorService.shutdownNow();
   }
-
-  @Override
-  public void close() {
-    executorService.shutdownNow();
-  }
-
+  
   /**
    * Intermediary runnable-wrapper for brvs registration
    */
