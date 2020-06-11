@@ -5,30 +5,41 @@
 
 package iroha.validation.transactions.provider.impl;
 
+import static iroha.validation.exception.BrvsErrorCode.REGISTRATION_FAILED;
+import static iroha.validation.exception.BrvsErrorCode.REGISTRATION_TIMEOUT;
+import static iroha.validation.exception.BrvsErrorCode.UNKNOWN_ACCOUNT;
+import static iroha.validation.exception.BrvsErrorCode.WRONG_DOMAIN;
 import static iroha.validation.utils.ValidationUtils.PROPORTION;
+import static iroha.validation.utils.ValidationUtils.REGISTRATION_BATCH_SIZE;
+import static iroha.validation.utils.ValidationUtils.fieldValidator;
+import static iroha.validation.utils.ValidationUtils.getDomain;
+import static iroha.validation.utils.ValidationUtils.sendWithLastResponseWaiting;
+import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
+import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
+import com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
-import com.google.gson.JsonElement;
+import com.google.common.collect.Lists;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
-import iroha.protocol.Endpoint;
 import iroha.protocol.Endpoint.TxStatus;
-import iroha.protocol.TransactionOuterClass;
+import iroha.validation.exception.BrvsException;
 import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.provider.UserQuorumProvider;
-import iroha.validation.transactions.provider.impl.util.BrvsData;
 import iroha.validation.transactions.provider.impl.util.RegistrationAwaiterWrapper;
 import iroha.validation.utils.ValidationUtils;
 import java.io.Closeable;
 import java.lang.reflect.Type;
 import java.security.Key;
 import java.security.KeyPair;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
@@ -55,8 +66,6 @@ import org.springframework.util.CollectionUtils;
 public class AccountManager implements UserQuorumProvider, RegistrationProvider, Closeable {
 
   private static final Logger logger = LoggerFactory.getLogger(AccountManager.class);
-  private static final FieldValidator FIELD_VALIDATOR = new FieldValidator();
-  private static final int PUBKEY_LENGTH = 32;
   private static final int INITIAL_USER_QUORUM_VALUE = 1;
   private static final int INITIAL_KEYS_AMOUNT = 1;
   private static final Type USER_SIGNATORIES_TYPE_TOKEN = new TypeToken<Set<String>>() {
@@ -71,15 +80,18 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
   private final String userSignatoriesAttribute;
   private final Set<String> userDomains;
   private final String userAccountsHolderAccount;
-  private final String brvsInstancesHolderAccount;
+  private final String userAccountsSetterAccount;
   private final List<KeyPair> keyPairs;
   private final Set<String> pubKeys;
+  private final IrohaQueryHelper irohaQueryHelper;
 
   public AccountManager(QueryAPI queryAPI,
       String userSignatoriesAttribute,
       String userDomains,
       String userAccountsHolderAccount,
-      String brvsInstancesHolderAccount, List<KeyPair> keyPairs) {
+      String userAccountsSetterAccount,
+      List<KeyPair> keyPairs,
+      IrohaQueryHelper irohaQueryHelper) {
 
     Objects.requireNonNull(queryAPI, "Query API must not be null");
     if (Strings.isNullOrEmpty(userSignatoriesAttribute)) {
@@ -93,13 +105,14 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
       throw new IllegalArgumentException(
           "User accounts holder account must not be neither null nor empty");
     }
-    if (Strings.isNullOrEmpty(brvsInstancesHolderAccount)) {
+    if (Strings.isNullOrEmpty(userAccountsSetterAccount)) {
       throw new IllegalArgumentException(
-          "Brvs instances holder account must not be neither null nor empty");
+          "User accounts holder account must not be neither null nor empty");
     }
     if (CollectionUtils.isEmpty(keyPairs)) {
       throw new IllegalArgumentException("Keypairs must not be neither null nor empty");
     }
+    Objects.requireNonNull(irohaQueryHelper, "IrohaQueryHelper must not be null");
 
     this.brvsAccountId = queryAPI.getAccountId();
     this.brvsAccountKeyPair = queryAPI.getKeyPair();
@@ -107,7 +120,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
     this.userSignatoriesAttribute = userSignatoriesAttribute;
     this.userDomains = Arrays.stream(userDomains.split(",")).collect(Collectors.toSet());
     this.userAccountsHolderAccount = userAccountsHolderAccount;
-    this.brvsInstancesHolderAccount = brvsInstancesHolderAccount;
+    this.userAccountsSetterAccount = userAccountsSetterAccount;
     this.keyPairs = keyPairs;
     pubKeys = this.keyPairs
         .stream()
@@ -116,6 +129,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
         .map(Utils::toHex)
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
+    this.irohaQueryHelper = irohaQueryHelper;
   }
 
   /**
@@ -158,13 +172,14 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
       Iterable<String> publicKeys) {
 
     final String jsonedKeys = ValidationUtils.irohaEscape(ValidationUtils.gson.toJson(publicKeys));
-    TxStatus txStatus = sendWithLastStatusWaiting(
+    TxStatus txStatus = sendWithLastResponseWaiting(
+        queryAPI.getApi(),
         Transaction
             .builder(brvsAccountId)
             .setAccountDetail(targetAccount, userSignatoriesAttribute, jsonedKeys)
             .sign(brvsAccountKeyPair)
             .build()
-    );
+    ).getTxStatus();
     if (!txStatus.equals(TxStatus.COMMITTED)) {
       throw new IllegalStateException(
           "Could not change user " + targetAccount +
@@ -206,13 +221,14 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
   }
 
   private void setUserQuorumIroha(String targetAccount, int quorum) {
-    TxStatus txStatus = sendWithLastStatusWaiting(
+    TxStatus txStatus = sendWithLastResponseWaiting(
+        queryAPI.getApi(),
         Transaction
             .builder(brvsAccountId)
             .setAccountQuorum(targetAccount, quorum)
             .sign(brvsAccountKeyPair)
             .build()
-    );
+    ).getTxStatus();
     if (!txStatus.equals(TxStatus.COMMITTED)) {
       throw new IllegalStateException(
           "Could not change user " + targetAccount +
@@ -242,22 +258,38 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
    * {@inheritDoc}
    */
   @Override
-  public void register(Iterable<String> accounts) throws InterruptedException {
-    final int size = Iterables.size(accounts);
-    final RegistrationAwaiterWrapper registrationAwaiterWrapper = new RegistrationAwaiterWrapper(
-        new CountDownLatch(size)
-    );
+  public void register(Collection<String> accounts) throws InterruptedException {
+    final List<List<String>> partitions = Lists
+        .partition(
+            new ArrayList<>(accounts),
+            REGISTRATION_BATCH_SIZE
+        );
+    for (List<String> partition : partitions) {
+      final int size = Iterables.size(partition);
+      final RegistrationAwaiterWrapper registrationAwaiterWrapper = new RegistrationAwaiterWrapper(
+          new CountDownLatch(size)
+      );
 
-    accounts.forEach(account -> executorService
-        .submit(new RegistrationRunnable(account, registrationAwaiterWrapper))
-    );
+      // TODO after XNET-96 try replacing with fixed thread pool
+      partition.forEach(account -> executorService
+          .submit(new RegistrationRunnable(account, registrationAwaiterWrapper))
+      );
 
-    if (!registrationAwaiterWrapper.getCountDownLatch().await(size * 10L, TimeUnit.SECONDS)) {
-      throw new IllegalStateException("Couldn't register accounts within a timeout");
-    }
-    final Exception registrationAwaiterWrapperException = registrationAwaiterWrapper.getException();
-    if (registrationAwaiterWrapperException != null) {
-      throw new IllegalStateException(registrationAwaiterWrapperException);
+      if (!registrationAwaiterWrapper.getCountDownLatch().await(size * 10L, TimeUnit.SECONDS)) {
+        throw new BrvsException(
+            "Couldn't register accounts within a timeout",
+            REGISTRATION_TIMEOUT
+        );
+      }
+      final Exception registrationAwaiterWrapperException = registrationAwaiterWrapper
+          .getException();
+      if (registrationAwaiterWrapperException != null) {
+        throw new BrvsException(
+            registrationAwaiterWrapperException.getMessage(),
+            registrationAwaiterWrapperException,
+            REGISTRATION_FAILED
+        );
+      }
     }
   }
 
@@ -289,11 +321,12 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
         transactionBuilder.removeSignatory(userAccountId, keyPairs.get(i - 1).getPublic());
       }
     }
-    TxStatus txStatus = sendWithLastStatusWaiting(
+    TxStatus txStatus = sendWithLastResponseWaiting(
+        queryAPI.getApi(),
         transactionBuilder
             .sign(brvsAccountKeyPair)
             .build()
-    );
+    ).getTxStatus();
     if (!txStatus.equals(TxStatus.COMMITTED)) {
       throw new IllegalStateException(
           "Could not set signatories to user " + userAccountId +
@@ -319,32 +352,27 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
    */
   @Override
   public Set<String> getRegisteredAccounts() {
+    //TODO XNET-96: Persist
     return registeredAccounts;
   }
 
-  private <T> Set<T> getAccountsFrom(String accountsHolderAccount,
+  private <T> Set<T> getAccountsFrom(
+      String accountsHolderAccount,
+      String accountsSetterAccount,
       Function<Entry, T> processor) {
     logger.info("Going to read accounts data from {}", accountsHolderAccount);
     Set<T> resultSet = new HashSet<>();
     try {
-      JsonElement rootNode = ValidationUtils.parser
-          .parse(queryAPI
-              .getAccount(accountsHolderAccount)
-              .getAccount()
-              .getJsonData()
-          );
-      rootNode.getAsJsonObject().entrySet().forEach(accountSetter ->
-          accountSetter
-              .getValue()
-              .getAsJsonObject()
-              .entrySet()
-              .forEach(entry -> {
-                    T candidate = processor.apply(entry);
-                    if (candidate != null) {
-                      resultSet.add(candidate);
-                    }
-                  }
-              )
+      final Map<String, String> map = irohaQueryHelper
+          .getAccountDetails(accountsHolderAccount, accountsSetterAccount)
+          .get();
+
+      map.entrySet().forEach(entry -> {
+            T candidate = processor.apply(entry);
+            if (candidate != null) {
+              resultSet.add(candidate);
+            }
+          }
       );
       return resultSet;
     } catch (ErrorResponseException e) {
@@ -353,9 +381,9 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
     }
   }
 
-  private String userAccountProcessor(Entry<String, JsonPrimitive> entry) {
+  private String userAccountProcessor(Entry<String, String> entry) {
     String key = entry.getKey();
-    String suffix = entry.getValue().getAsString();
+    String suffix = entry.getValue();
     if (!key.endsWith(suffix)) {
       return null;
     }
@@ -363,17 +391,9 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
     // usernamedomain -> domain
     // we need to extract username from the key and add the domain to it separated with @
     final String recoveredSuffix = suffix.replace('_', '.');
-    return key.substring(0, key.lastIndexOf(suffix)).concat("@").concat(recoveredSuffix);
-  }
-
-  private BrvsData brvsAccountProcessor(Entry<String, JsonPrimitive> entry) {
-    String pubkey = entry.getKey();
-    String hostname = entry.getValue().getAsString();
-    if (pubkey.length() != PUBKEY_LENGTH) {
-      logger.warn("Expected hostname-pubkey pair. Got {} : {}", hostname, pubkey);
-      return null;
-    }
-    return new BrvsData(hostname, pubkey);
+    return key.substring(0, key.lastIndexOf(suffix))
+        .concat(accountIdDelimiter)
+        .concat(recoveredSuffix);
   }
 
   /**
@@ -381,30 +401,26 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
    */
   @Override
   public Set<String> getUserAccounts() {
-    return getAccountsFrom(userAccountsHolderAccount, this::userAccountProcessor);
+    return getAccountsFrom(
+        userAccountsHolderAccount,
+        userAccountsSetterAccount,
+        this::userAccountProcessor
+    );
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public Set<BrvsData> getBrvsInstances() {
-    return getAccountsFrom(brvsInstancesHolderAccount, this::brvsAccountProcessor);
-  }
-
-  private Endpoint.TxStatus sendWithLastStatusWaiting(
-      TransactionOuterClass.Transaction transaction) {
-    return queryAPI.getApi().transaction(
-        transaction,
-        ValidationUtils.subscriptionStrategy
-    ).blockingLast().getTxStatus();
+  public Set<String> getUserDomains() {
+    return Collections.unmodifiableSet(userDomains);
   }
 
   @Override
   public void close() {
     executorService.shutdownNow();
   }
-
+  
   /**
    * Intermediary runnable-wrapper for brvs registration
    */
@@ -420,20 +436,22 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
 
     private void doRegister(String accountId) {
       logger.info("Going to register {}", accountId);
-      FIELD_VALIDATOR.checkAccountId(accountId);
+      fieldValidator.checkAccountId(accountId);
       if (registeredAccounts.contains(accountId)) {
         logger.warn("Account {} has already been registered, omitting", accountId);
         return;
       }
       if (!userDomains.contains(getDomain(accountId))) {
-        throw new IllegalArgumentException(
+        throw new BrvsException(
             "The BRVS instance is not permitted to process the domain specified: " +
-                getDomain(accountId) + ".");
+                getDomain(accountId) + ".", WRONG_DOMAIN);
       }
       if (!existsInIroha(accountId)) {
-        throw new IllegalArgumentException(
+        throw new BrvsException(
             "Account " + accountId
-                + " does not exist or an error during querying process occurred.");
+                + " does not exist or an error during querying process occurred.",
+            UNKNOWN_ACCOUNT
+        );
       }
       final Set<String> userSignatories = getUserSignatoriesDetail(accountId);
       try {
@@ -444,8 +462,11 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
         registeredAccounts.add(accountId);
         logger.info("Successfully registered {}", accountId);
       } catch (Exception e) {
-        throw new IllegalStateException(
-            "Error during brvs user registration occurred. Account id: " + accountId, e);
+        throw new BrvsException(
+            "Error during brvs user registration occurred. Account id: " + accountId,
+            e,
+            REGISTRATION_FAILED
+        );
       }
     }
 
@@ -463,10 +484,6 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
 
     private boolean existsInIroha(String userAccountId) {
       return queryAPI.getAccount(userAccountId).hasAccount();
-    }
-
-    private String getDomain(String accountId) {
-      return accountId.split("@")[1];
     }
 
     @Override

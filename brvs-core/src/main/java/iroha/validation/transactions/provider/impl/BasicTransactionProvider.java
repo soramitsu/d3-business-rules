@@ -9,19 +9,16 @@ import static com.d3.commons.util.ThreadUtilKt.createPrettyScheduledThreadPool;
 import static com.d3.commons.util.ThreadUtilKt.createPrettySingleThreadPool;
 import static iroha.validation.utils.ValidationUtils.getTxAccountId;
 import static iroha.validation.utils.ValidationUtils.hexHash;
-import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
-import com.google.common.base.Strings;
 import io.reactivex.Observable;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import iroha.protocol.BlockOuterClass.Block;
-import iroha.protocol.Commands.Command;
-import iroha.protocol.Commands.RemoveSignatory;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.listener.BrvsIrohaChainListener;
 import iroha.validation.transactions.TransactionBatch;
+import iroha.validation.transactions.plugin.PluggableLogic;
 import iroha.validation.transactions.provider.RegistrationProvider;
 import iroha.validation.transactions.provider.TransactionProvider;
 import iroha.validation.transactions.provider.UserQuorumProvider;
@@ -30,17 +27,12 @@ import iroha.validation.utils.ValidationUtils;
 import iroha.validation.verdict.ValidationResult;
 import iroha.validation.verdict.Verdict;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +47,7 @@ public class BasicTransactionProvider implements TransactionProvider {
   private final UserQuorumProvider userQuorumProvider;
   private final RegistrationProvider registrationProvider;
   private final BrvsIrohaChainListener irohaReliableChainListener;
+  private final List<PluggableLogic<?>> pluggableLogicList;
   private final ScheduledExecutorService executor = createPrettyScheduledThreadPool(
       "brvs", "pending-processor"
   );
@@ -63,7 +56,6 @@ public class BasicTransactionProvider implements TransactionProvider {
   ));
   // Observable
   private final PublishSubject<TransactionBatch> subject = PublishSubject.create();
-  private final Set<String> userDomains;
   private boolean isStarted;
 
   public BasicTransactionProvider(
@@ -71,22 +63,33 @@ public class BasicTransactionProvider implements TransactionProvider {
       UserQuorumProvider userQuorumProvider,
       RegistrationProvider registrationProvider,
       BrvsIrohaChainListener irohaReliableChainListener,
-      String userDomains
-  ) {
-    Objects.requireNonNull(transactionVerdictStorage, "TransactionVerdictStorage must not be null");
-    Objects.requireNonNull(userQuorumProvider, "UserQuorumProvider must not be null");
-    Objects.requireNonNull(registrationProvider, "RegistrationProvider must not be null");
-    Objects
-        .requireNonNull(irohaReliableChainListener, "IrohaReliableChainListener must not be null");
-    if (Strings.isNullOrEmpty(userDomains)) {
-      throw new IllegalArgumentException("User domains string must not be null nor empty");
-    }
+      List<PluggableLogic<?>> pluggableLogicList) {
+    Objects.requireNonNull(
+        transactionVerdictStorage,
+        "TransactionVerdictStorage must not be null"
+    );
+    Objects.requireNonNull(
+        userQuorumProvider,
+        "UserQuorumProvider must not be null"
+    );
+    Objects.requireNonNull(
+        registrationProvider,
+        "RegistrationProvider must not be null"
+    );
+    Objects.requireNonNull(
+        irohaReliableChainListener,
+        "IrohaReliableChainListener must not be null"
+    );
+    Objects.requireNonNull(
+        pluggableLogicList,
+        "Pluggable logics List must not be null"
+    );
 
     this.transactionVerdictStorage = transactionVerdictStorage;
     this.userQuorumProvider = userQuorumProvider;
     this.registrationProvider = registrationProvider;
+    this.pluggableLogicList = pluggableLogicList;
     this.irohaReliableChainListener = irohaReliableChainListener;
-    this.userDomains = Arrays.stream(userDomains.split(",")).collect(Collectors.toSet());
   }
 
   /**
@@ -188,154 +191,8 @@ public class BasicTransactionProvider implements TransactionProvider {
   }
 
   private void processCommitted(List<Transaction> blockTransactions) {
-    if (blockTransactions != null) {
-      blockTransactions.forEach(transaction -> {
-            try {
-              registerCreatedAccountByTransactionScanning(transaction);
-              modifyUserQuorumIfNeeded(transaction);
-            } catch (Exception e) {
-              throw new IllegalStateException(
-                  "Couldn't process account changes from the committed block", e
-              );
-            }
-          }
-      );
-    }
-  }
-
-  private void modifyUserQuorumIfNeeded(Transaction blockTransaction) {
-    final String creatorAccountId = getTxAccountId(blockTransaction);
-    if (!userDomains.contains(getDomain(creatorAccountId))) {
-      return;
-    }
-
-    final Set<String> registeredAccounts = registrationProvider.getRegisteredAccounts();
-    if (!registeredAccounts.contains(creatorAccountId)) {
-      return;
-    }
-
-    final List<Command> commands = blockTransaction
-        .getPayload()
-        .getReducedPayload()
-        .getCommandsList();
-
-    modifyUserQuorum(commands, registeredAccounts);
-  }
-
-  private void modifyUserQuorum(Collection<Command> commands, Set<String> registeredAccounts) {
-
-    final Map<String, Set<String>> accountRemovedSignatories = constructRemovedSignatoriesByAccountId(
-        commands,
-        registeredAccounts
-    );
-
-    final Map<String, Set<String>> accountAddedSignatories = constructAddedSignatoriesByAccountId(
-        commands,
-        registeredAccounts
-    );
-
-    if (accountAddedSignatories.isEmpty() && accountRemovedSignatories.isEmpty()) {
-      return;
-    }
-
-    final Set<String> accountsKeysSet = new HashSet<>(accountAddedSignatories.keySet());
-    accountsKeysSet.addAll(accountRemovedSignatories.keySet());
-
-    for (final String accountId : accountsKeysSet) {
-      final Set<String> userSignatories = new HashSet<>(
-          userQuorumProvider.getUserSignatoriesDetail(accountId)
-      );
-      final Set<String> removedSignatories = accountRemovedSignatories.get(accountId);
-      final Set<String> addedSignatories = accountAddedSignatories.get(accountId);
-      if (removedSignatories != null) {
-        userSignatories.removeAll(removedSignatories);
-      }
-      if (addedSignatories != null) {
-        userSignatories.addAll(addedSignatories);
-      }
-      if (userSignatories.isEmpty()) {
-        logger.warn("There was an attempt to delete all keys of {}", accountId);
-        return;
-      }
-      logger.info("Going to modify account {} quorum", accountId);
-      userQuorumProvider.setUserQuorumDetail(accountId, userSignatories);
-      userQuorumProvider.setUserAccountQuorum(accountId,
-          userQuorumProvider.getValidQuorumForUserAccount(accountId)
-      );
-    }
-  }
-
-  private Map<String, Set<String>> constructRemovedSignatoriesByAccountId(
-      Collection<Command> commands,
-      Set<String> registeredAccounts) {
-    final Map<String, Set<String>> accountRemovedSignatories = new HashMap<>();
-
-    commands
-        .stream()
-        .filter(Command::hasRemoveSignatory)
-        .map(Command::getRemoveSignatory)
-        .filter(command -> registeredAccounts.contains(command.getAccountId()))
-        .forEach(removeSignatory -> {
-          final String signatoryAccountId = removeSignatory.getAccountId();
-          if (!accountRemovedSignatories.containsKey(signatoryAccountId)) {
-            accountRemovedSignatories.put(signatoryAccountId, new HashSet<>());
-          }
-          accountRemovedSignatories.get(signatoryAccountId)
-              .add(removeSignatory.getPublicKey().toUpperCase());
-        });
-    return accountRemovedSignatories;
-  }
-
-  private Map<String, Set<String>> constructAddedSignatoriesByAccountId(
-      Collection<Command> commands,
-      Set<String> registeredAccounts) {
-    final Map<String, Set<String>> accountAddedSignatories = new HashMap<>();
-
-    commands
-        .stream()
-        .filter(Command::hasAddSignatory)
-        .map(Command::getAddSignatory)
-        .filter(command -> registeredAccounts.contains(command.getAccountId()))
-        .forEach(addSignatory -> {
-          final String signatoryAccountId = addSignatory.getAccountId();
-          if (!accountAddedSignatories.containsKey(signatoryAccountId)) {
-            accountAddedSignatories.put(signatoryAccountId, new HashSet<>());
-          }
-          accountAddedSignatories.get(signatoryAccountId)
-              .add(addSignatory.getPublicKey().toUpperCase());
-        });
-    return accountAddedSignatories;
-  }
-
-  private void registerCreatedAccountByTransactionScanning(Transaction blockTransaction)
-      throws InterruptedException {
-    List<String> createAccountList = blockTransaction
-        .getPayload()
-        .getReducedPayload()
-        .getCommandsList()
-        .stream()
-        .filter(Command::hasCreateAccount)
-        .map(Command::getCreateAccount)
-        .filter(command -> userDomains.contains(command.getDomainId()))
-        .map(command -> command.getAccountName().concat(accountIdDelimiter)
-            .concat(command.getDomainId()))
-        .collect(Collectors.toList());
-    if (!createAccountList.isEmpty()) {
-      final Set<String> userAccounts = registrationProvider.getUserAccounts();
-      createAccountList = createAccountList
-          .stream()
-          .filter(userAccounts::contains)
-          .collect(Collectors.toList());
-      registrationProvider.register(createAccountList);
-    }
-  }
-
-  private String getDomain(String accountId) {
-    try {
-      return accountId.split("@")[1];
-    } catch (Exception e) {
-      logger.warn("Couldn't parse domain of " + accountId, e);
-      return "";
+    if (blockTransactions != null && !blockTransactions.isEmpty()) {
+      pluggableLogicList.forEach(pluggableLogic -> pluggableLogic.apply(blockTransactions));
     }
   }
 

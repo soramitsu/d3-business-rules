@@ -56,6 +56,12 @@
     <constructor-arg name="keyPair" ref="brvsAccountKeyPair"/>
   </bean>
 
+  <!-- IROHA QUERY HELPER CONFIG -->
+  <bean id="queryHelper" class="com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl">
+    <constructor-arg name="queryAPI" ref="queryAPI"/>
+    <constructor-arg name="pageSize" type="int" value="500"/>
+  </bean>
+
   <!-- STORAGE CONFIG -->
   <bean id="mongoVerdictStorage"
     class="iroha.validation.transactions.storage.impl.mongo.MongoTransactionVerdictStorage">
@@ -70,9 +76,71 @@
     <constructor-arg name="userSignatoriesAttribute" value="${USER_SIGNATORIES_KEY}"/>
     <constructor-arg name="userDomains" value="${BRVS_USERDOMAINS}"/>
     <constructor-arg name="userAccountsHolderAccount" value="${ACCOUNTS_HOLDER}"/>
-    <constructor-arg name="brvsInstancesHolderAccount" value="${CREDENTIAL_ACCOUNTID}"/>
+    <constructor-arg name="userAccountsSetterAccount" value="${ACCOUNTS_HOLDER_SETTER}"/>
     <constructor-arg name="keyPairs" ref="keysList"/>
+    <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
   </bean>
+
+  <!--  SORA PROJECT PROVIDER CONFIG-->
+  <bean id="soraProjectsProvider"
+    class="iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider">
+    <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
+    <constructor-arg name="accountsHolder" value="${SORA_DISTRIBUTION_PROJECTS_HOLDER}"/>
+    <constructor-arg name="accountsSetter" value="${SORA_DISTRIBUTION_PROJECTS_SETTER}"/>
+  </bean>
+
+  <!--  SORA DISTRIBUTION CONFIG-->
+  <bean id="soraDistributionLogic"
+    class="iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic">
+    <constructor-arg name="queryAPI" ref="queryAPI"/>
+    <constructor-arg name="infoSetterAccount" value="${SORA_DISTRIBUTION_SETTER}"/>
+    <constructor-arg name="billingRule" ref="billingRule"/>
+    <constructor-arg name="projectAccountProvider" ref="soraProjectsProvider"/>
+    <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
+  </bean>
+
+  <!--  QUORUM REACTION CONFIG-->
+  <bean id="quorumReactionLogic"
+    class="iroha.validation.transactions.plugin.impl.QuorumReactionPluggableLogic">
+    <constructor-arg name="accountManager" ref="accountManager"/>
+  </bean>
+
+  <!--  REGISTRATION REACTION CONFIG-->
+  <bean id="registrationReactionLogic"
+    class="iroha.validation.transactions.plugin.impl.RegistrationReactionPluggableLogic">
+    <constructor-arg name="registrationProvider" ref="accountManager"/>
+  </bean>
+
+  <!--  PROJECT ACCOUNTS REACTION CONFIG-->
+  <bean id="projectAccountsReactionLogic"
+    class="iroha.validation.transactions.plugin.impl.sora.NewProjectReactionPluggableLogic">
+    <constructor-arg name="projectAccountProvider" ref="soraProjectsProvider"/>
+  </bean>
+
+  <!-- ATOMIC REFERENCE OF WITHDRAWAL LIMITS-->
+  <bean id="xorWithdrawalLimitRemainderReference"
+    class="java.util.concurrent.atomic.AtomicReference"/>
+
+  <!-- WITHDRAWAL REACTION LOGIC-->
+  <bean id="withdrawalReactionLogic"
+    class="iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic">
+    <constructor-arg name="queryAPI" ref="queryAPI"/>
+    <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
+    <constructor-arg name="limitHolderAccount" value="${SORA_WITHDRAWAL_LIMIT_HOLDER_ACCOUNT_ID}"/>
+    <constructor-arg name="limitSetterAccount" value="${SORA_WITHDRAWAL_LIMIT_SETTER_ACCOUNT_ID}"/>
+    <constructor-arg name="xorWithdrawalLimitRemainder" ref="xorWithdrawalLimitRemainderReference"/>
+    <constructor-arg name="withdrawalAccountId" value="${SORA_WITHDRAWAL_ACCOUNT_ID}"/>
+    <constructor-arg name="registrationProvider" ref="accountManager"/>
+  </bean>
+
+  <util:list id="logicList" list-class="java.util.ArrayList"
+    value-type="iroha.validation.transactions.plugin.PluggableLogic">
+    <ref bean="registrationReactionLogic"/>
+    <ref bean="quorumReactionLogic"/>
+    <ref bean="projectAccountsReactionLogic"/>
+    <ref bean="soraDistributionLogic"/>
+    <ref bean="withdrawalReactionLogic"/>
+  </util:list>
 
   <!-- PROVIDER CONFIG -->
   <bean id="transactionProvider"
@@ -81,7 +149,7 @@
     <constructor-arg name="userQuorumProvider" ref="accountManager"/>
     <constructor-arg name="registrationProvider" ref="accountManager"/>
     <constructor-arg name="irohaReliableChainListener" ref="irohaReliableChainListener"/>
-    <constructor-arg name="userDomains" value="${BRVS_USERDOMAINS}"/>
+    <constructor-arg name="pluggableLogicList" ref="logicList"/>
   </bean>
 
   <!-- CHAIN LISTENER CONFIG -->
@@ -131,7 +199,9 @@
     <constructor-arg name="transactionSigner" ref="transactionSigner"/>
     <constructor-arg name="registrationProvider" ref="accountManager"/>
     <constructor-arg name="brvsData" ref="brvsData"/>
-    <constructor-arg name="ruleMonitor" ref="ruleMonitor"/>
+    <constructor-arg name="ruleMonitor">
+      <null/>
+    </constructor-arg>
   </bean>
 
   <bean class="iroha.validation.service.impl.ValidationServiceImpl">
@@ -159,16 +229,16 @@
     <constructor-arg name="btcWithdrawalAccount" value="${BILLING_BTCWITHDRAWALACCOUNT}"/>
   </bean>
   <bean id="quorumBanRule" class="iroha.validation.rules.impl.core.NoQuorumModificationsRule"/>
-  <bean id="byaccoDomainInternalJpyRule" class="iroha.validation.rules.impl.byacco.ByaccoDomainInternalAssetRule">
-    <constructor-arg name="assetId" value="${BYACCO_DOMAIN_INTERNAL_ASSET_ID}"/>
-    <constructor-arg name="domains" value="${BYACCO_DOMAIN_INTERNAL_DOMAINS}"/>
+  <bean id="xorWithdrawalLimitRule" class="iroha.validation.rules.impl.sora.XorWithdrawalLimitRule">
+    <constructor-arg name="withdrawalAccountId" value="${SORA_WITHDRAWAL_ACCOUNT_ID}"/>
+    <constructor-arg name="xorWithdrawalLimitRemainder" ref="xorWithdrawalLimitRemainderReference"/>
   </bean>
   <util:map id="rules" map-class="java.util.HashMap">
     <entry key="restrictedKeysRule" value-ref="restrictedKeysRule"/>
     <entry key="minKeysRule" value-ref="minKeysRule"/>
     <entry key="billingRule" value-ref="billingRule"/>
     <entry key="quorumBanRule" value-ref="quorumBanRule"/>
-    <entry key="byaccoDomainInternalJpyRule" value-ref="byaccoDomainInternalJpyRule"/>
+    <entry key="xorWithdrawalLimitRule" value-ref="xorWithdrawalLimitRule"/>
     <!-- More can be added -->
   </util:map>
 

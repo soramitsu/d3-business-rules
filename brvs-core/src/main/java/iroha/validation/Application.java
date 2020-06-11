@@ -34,7 +34,7 @@ public class Application {
   private static final Logger logger = LoggerFactory.getLogger(Application.class);
   private static final String BRVS_PORT_BEAN_NAME = "brvsPort";
   private static final int DEFAULT_PORT = 8080;
-  private static final String BASE_URI_FORMAT = "http://0.0.0.0:%d/brvs/rest";
+  private static final String BASE_URI_FORMAT = "http://0.0.0.0:%d";
 
   public static void main(String[] args) {
     try {
@@ -57,8 +57,6 @@ public class Application {
       protected void configure() {
         bind(context.getBean(TransactionVerdictStorage.class)).to(TransactionVerdictStorage.class);
         bind(context.getBean(RegistrationProvider.class)).to(RegistrationProvider.class);
-        bind(context.getBean(IrohaAPI.class)).to(IrohaAPI.class);
-        bind(context.getBean("brvsAccountKeyPair", KeyPair.class)).to(KeyPair.class);
       }
     });
     resourceConfig.register(new CrossDomainFilter());
