@@ -8,18 +8,27 @@ package iroha.validation.utils;
 import static jp.co.soramitsu.crypto.ed25519.spec.EdDSANamedCurveTable.ED_25519;
 import static jp.co.soramitsu.iroha.java.Utils.IROHA_FRIENDLY_NEW_LINE;
 import static jp.co.soramitsu.iroha.java.Utils.IROHA_FRIENDLY_QUOTE;
+import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
 import com.d3.chainadapter.client.RMQConfig;
 import com.d3.commons.config.ConfigsKt;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
+import io.reactivex.Observable;
 import iroha.protocol.BlockOuterClass.Block;
+import iroha.protocol.Endpoint.ToriiResponse;
 import iroha.protocol.Endpoint.TxStatus;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.TransactionBatch;
 import java.io.IOException;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,6 +36,7 @@ import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.xml.bind.DatatypeConverter;
 import jp.co.soramitsu.crypto.ed25519.Ed25519Sha3;
@@ -35,6 +45,9 @@ import jp.co.soramitsu.crypto.ed25519.EdDSAPublicKey;
 import jp.co.soramitsu.crypto.ed25519.spec.EdDSANamedCurveTable;
 import jp.co.soramitsu.crypto.ed25519.spec.EdDSAParameterSpec;
 import jp.co.soramitsu.crypto.ed25519.spec.EdDSAPublicKeySpec;
+import jp.co.soramitsu.iroha.java.FieldValidator;
+import jp.co.soramitsu.iroha.java.IrohaAPI;
+import jp.co.soramitsu.iroha.java.QueryAPI;
 import jp.co.soramitsu.iroha.java.Utils;
 import jp.co.soramitsu.iroha.java.subscription.SubscriptionStrategy;
 import jp.co.soramitsu.iroha.java.subscription.WaitForTerminalStatus;
@@ -42,11 +55,19 @@ import jp.co.soramitsu.iroha.java.subscription.WaitForTerminalStatus;
 public interface ValidationUtils {
 
   EdDSAParameterSpec EdDSASpec = EdDSANamedCurveTable.getByName(ED_25519);
-  Gson gson = new GsonBuilder().create();
+  Gson gson = new GsonBuilder().registerTypeAdapter(
+      BigDecimal.class,
+      new BigDecimalAsStringJsonSerializer()
+  ).create();
   JsonParser parser = new JsonParser();
+  FieldValidator fieldValidator = new FieldValidator();
+
+  long timeoutForIrohaStatus = 5;
 
   // BRVS keys count = User keys count
   int PROPORTION = 2;
+
+  int REGISTRATION_BATCH_SIZE = 500;
 
   Ed25519Sha3 crypto = new Ed25519Sha3();
 
@@ -59,6 +80,25 @@ public interface ValidationUtils {
           TxStatus.UNRECOGNIZED
       )
   );
+
+  static ToriiResponse sendWithLastResponseWaiting(
+      IrohaAPI irohaAPI,
+      Transaction transaction) {
+    return irohaAPI.transaction(
+        transaction,
+        subscriptionStrategy
+    ).takeUntil(Observable.timer(timeoutForIrohaStatus, TimeUnit.MINUTES))
+        .blockingLast();
+  }
+
+  static ToriiResponse trackHashWithLastResponseWaiting(
+      IrohaAPI irohaAPI,
+      byte[] hash) {
+    return subscriptionStrategy
+        .subscribe(irohaAPI, hash)
+        .takeUntil(Observable.timer(timeoutForIrohaStatus, TimeUnit.MINUTES))
+        .blockingLast();
+  }
 
   static String getTxAccountId(final Transaction transaction) {
     return transaction.getPayload().getReducedPayload().getCreatorAccountId();
@@ -144,5 +184,40 @@ public interface ValidationUtils {
 
   static EdDSAPublicKey derivePublicKey(EdDSAPrivateKey privateKey) {
     return new EdDSAPublicKey(new EdDSAPublicKeySpec(privateKey.getA(), EdDSASpec));
+  }
+
+  static String getDomain(String accountId) {
+    return accountId.split(accountIdDelimiter)[1];
+  }
+
+  static <T> T advancedQueryAccountDetails(
+      QueryAPI queryAPI,
+      String accountId,
+      String setterAccountId,
+      String key,
+      Class<T> type) {
+    final JsonElement jsonElement = parser.parse(
+        queryAPI.getAccountDetails(
+            accountId,
+            setterAccountId,
+            key
+        )
+    ).getAsJsonObject().get(setterAccountId);
+    return jsonElement == null ? null : gson.fromJson(
+        Utils.irohaUnEscape(jsonElement.getAsJsonObject().get(key).getAsString()),
+        type
+    );
+  }
+
+  static String replaceLast(String text, String regex, String replacement) {
+    return text.replaceFirst("(?s)(.*)" + regex, "$1" + replacement);
+  }
+
+  class BigDecimalAsStringJsonSerializer implements JsonSerializer<BigDecimal> {
+
+    @Override
+    public JsonElement serialize(BigDecimal src, Type typeOfSrc, JsonSerializationContext context) {
+      return new JsonPrimitive(src.toPlainString());
+    }
   }
 }

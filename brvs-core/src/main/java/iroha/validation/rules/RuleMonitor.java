@@ -6,14 +6,16 @@
 package iroha.validation.rules;
 
 import static com.d3.commons.util.ThreadUtilKt.createPrettySingleThreadPool;
+import static iroha.validation.utils.ValidationUtils.REGISTRATION_BATCH_SIZE;
 
+import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
+import com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 import iroha.protocol.Commands.Command;
 import iroha.protocol.Commands.SetAccountDetail;
 import iroha.protocol.TransactionOuterClass.Transaction.Payload.ReducedPayload;
 import iroha.validation.listener.BrvsIrohaChainListener;
-import iroha.validation.utils.ValidationUtils;
 import iroha.validation.validators.Validator;
 import java.util.Objects;
 import java.util.Set;
@@ -33,21 +35,21 @@ public class RuleMonitor {
   private final Scheduler scheduler = Schedulers.from(createPrettySingleThreadPool(
       "rule-monitor", "chain-listener"
   ));
-  private final QueryAPI queryAPI;
   private final BrvsIrohaChainListener irohaChainListener;
   private final String repositoryAccountId;
   private final String settingsAccountId;
   private final String setterAccountId;
   private final Validator validator;
   private boolean isStarted;
+  private final IrohaQueryHelper irohaQueryHelper;
 
   public RuleMonitor(QueryAPI queryAPI,
       BrvsIrohaChainListener irohaChainListener,
       String repositoryAccountId,
       String settingsAccountId,
       String setterAccountId,
-      Validator validator) {
-    this.queryAPI = queryAPI;
+      Validator validator,
+      IrohaQueryHelper irohaQueryHelper) {
     Objects.requireNonNull(queryAPI, "QueryAPI must not be null");
     Objects.requireNonNull(irohaChainListener, "IrohaChainListener must not be null");
     if (StringUtils.isEmpty(repositoryAccountId)) {
@@ -62,12 +64,14 @@ public class RuleMonitor {
       throw new IllegalArgumentException("Setter account ID must not be neither null nor empty");
     }
     Objects.requireNonNull(validator, "ValidationServiceContext must not be null");
+    Objects.requireNonNull(irohaQueryHelper, "IrohaQueryHelper must not be null");
 
     this.irohaChainListener = irohaChainListener;
     this.repositoryAccountId = repositoryAccountId;
     this.settingsAccountId = settingsAccountId;
     this.setterAccountId = setterAccountId;
     this.validator = validator;
+    this.irohaQueryHelper = irohaQueryHelper;
   }
 
   /**
@@ -135,13 +139,15 @@ public class RuleMonitor {
    * @return {@link Rule} object
    */
   private Rule parseRepositoryRule(String name) {
-    final String script = ValidationUtils.parser
-        .parse(queryAPI.getAccountDetails(repositoryAccountId, setterAccountId, name))
-        .getAsJsonObject()
-        .get(setterAccountId)
-        .getAsJsonObject()
-        .get(name)
-        .getAsString();
-    return RuleParser.parse(Utils.irohaUnEscape(script));
+    return RuleParser.parse(
+        Utils.irohaUnEscape(
+            Objects.requireNonNull(
+                irohaQueryHelper
+                    .getAccountDetails(repositoryAccountId, setterAccountId, name)
+                    .get()
+                    .orElse(null)
+            )
+        )
+    );
   }
 }

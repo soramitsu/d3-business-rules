@@ -406,7 +406,7 @@ public class BillingRule implements Rule {
     return null;
   }
 
-  private BillingInfo getBillingInfoFor(String domain, String asset, BillingTypeEnum originalType) {
+  public BillingInfo getBillingInfoFor(String domain, String asset, BillingTypeEnum originalType) {
     return cache
         .stream()
         .filter(entry -> entry.getDomain().equals(domain)

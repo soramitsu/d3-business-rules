@@ -5,10 +5,23 @@
 
 package iroha.validation.behavior;
 
+import static iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider.ACCOUNT_PLACEHOLDER;
+import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_FINISHED_KEY;
+import static iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.DISTRIBUTION_PROPORTIONS_KEY;
+import static iroha.validation.utils.ValidationUtils.advancedQueryAccountDetails;
 import static iroha.validation.utils.ValidationUtils.crypto;
+import static iroha.validation.utils.ValidationUtils.gson;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.d3.chainadapter.client.RMQConfig;
+import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
+import com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl;
 import com.google.common.io.Files;
 import iroha.protocol.BlockOuterClass;
 import iroha.protocol.Endpoint.TxStatus;
@@ -22,9 +35,17 @@ import iroha.validation.listener.BrvsIrohaChainListener;
 import iroha.validation.rules.Rule;
 import iroha.validation.rules.RuleMonitor;
 import iroha.validation.rules.impl.assets.TransferTxVolumeRule;
+import iroha.validation.rules.impl.billing.BillingInfo;
+import iroha.validation.rules.impl.billing.BillingRule;
 import iroha.validation.rules.impl.core.SampleRule;
 import iroha.validation.service.ValidationService;
 import iroha.validation.service.impl.ValidationServiceImpl;
+import iroha.validation.transactions.plugin.impl.QuorumReactionPluggableLogic;
+import iroha.validation.transactions.plugin.impl.RegistrationReactionPluggableLogic;
+import iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider;
+import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic;
+import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionFinished;
+import iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic.SoraDistributionProportions;
 import iroha.validation.transactions.provider.impl.AccountManager;
 import iroha.validation.transactions.provider.impl.BasicTransactionProvider;
 import iroha.validation.transactions.provider.impl.util.BrvsData;
@@ -48,6 +69,7 @@ import jp.co.soramitsu.iroha.java.IrohaAPI;
 import jp.co.soramitsu.iroha.java.QueryAPI;
 import jp.co.soramitsu.iroha.java.QueryBuilder;
 import jp.co.soramitsu.iroha.java.Transaction;
+import jp.co.soramitsu.iroha.java.TransactionBuilder;
 import jp.co.soramitsu.iroha.java.Utils;
 import jp.co.soramitsu.iroha.java.subscription.WaitForTerminalStatus;
 import jp.co.soramitsu.iroha.testcontainers.IrohaContainer;
@@ -70,10 +92,33 @@ public class IrohaIntegrationTest {
   private static final KeyPair senderKeypair = crypto.generateKeypair();
   private static final KeyPair receiverKeypair = crypto.generateKeypair();
   private static final KeyPair validatorKeypair = crypto.generateKeypair();
-  private static final String serviceDomainName = "notary";
+  private static final KeyPair projectOwnerKeypair = crypto.generateKeypair();
+  private static final KeyPair projectSetterKeypair = crypto.generateKeypair();
+  private static final String serviceDomainName = "sora";
   private static final String userDomainName = "user";
   private static final String roleName = "user";
   private static final String senderName = "sender";
+  private static final String projectOwnerOne = "owner1";
+  private static final String projectOwnerTwo = "owner2";
+  private static final String projectOwnerThree = "owner3";
+  private static final String projectParticipantOne = "participantone";
+  private static final String projectParticipantTwo = "participanttwo";
+  private static final String projectParticipantThree = "participantthree";
+  private static final String projectInfoSetter = "pojectinfosetter";
+  private static final String projectOwnerOneId = String
+      .format("%s@%s", projectOwnerOne, userDomainName);
+  private static final String projectOwnerTwoId = String
+      .format("%s@%s", projectOwnerTwo, userDomainName);
+  private static final String projectOwnerThreeId = String
+      .format("%s@%s", projectOwnerThree, userDomainName);
+  private static final String projectParticipantOneId = String
+      .format("%s@%s", projectParticipantOne, userDomainName);
+  private static final String projectParticipantTwoId = String
+      .format("%s@%s", projectParticipantTwo, userDomainName);
+  private static final String projectParticipantThreeId = String
+      .format("%s@%s", projectParticipantThree, userDomainName);
+  private static final String projectInfoSetterId = String
+      .format("%s@%s", projectInfoSetter, userDomainName);
   private static final String senderId = String.format("%s@%s", senderName, userDomainName);
   private static final String receiverName = "receiver";
   private static final String receiverId = String.format("%s@%s", receiverName, userDomainName);
@@ -83,7 +128,7 @@ public class IrohaIntegrationTest {
       .format("%s@%s", validatorName, serviceDomainName);
   private static final String validatorConfigId = String.format("%s@%s", validatorConfigName,
       serviceDomainName);
-  private static final String asset = "bux";
+  private static final String asset = "xor";
   private static final String assetId = String.format("%s#%s", asset, serviceDomainName);
   private static final int INITIALIZATION_TIME = 5000;
   private TransactionVerdictStorage transactionVerdictStorage;
@@ -94,7 +139,7 @@ public class IrohaIntegrationTest {
   private static final GenericContainer mongo = new GenericContainer<>("mongo:4.0.6")
       .withExposedPorts(27017);
   private static final GenericContainer chainAdapter = new GenericContainer<>(
-      "docker.soramitsu.co.jp/soramitsu/chain-adapter:latest");
+      "docker.soramitsu.co.jp/soramitsu/chain-adapter:develop");
   private static final WaitForTerminalStatus terminalStrategy = new WaitForTerminalStatus(
       Arrays.asList(
           TxStatus.COMMITTED,
@@ -108,6 +153,8 @@ public class IrohaIntegrationTest {
   private String mongoHost;
   private Integer mongoPort;
   private ValidationServiceImpl validationService;
+  private final BillingRule billingRuleMock = mock(BillingRule.class);
+  private QueryAPI queryAPI;
 
   private static BlockOuterClass.Block getGenesisBlock() {
     return new GenesisBlockBuilder()
@@ -133,7 +180,8 @@ public class IrohaIntegrationTest {
                         RolePermission.can_grant_can_add_my_signatory,
                         RolePermission.can_grant_can_set_my_quorum,
                         RolePermission.can_set_detail,
-                        RolePermission.can_get_blocks
+                        RolePermission.can_get_blocks,
+                        RolePermission.can_subtract_asset_qty
                     )
                 )
                 .createDomain(serviceDomainName, roleName)
@@ -154,9 +202,55 @@ public class IrohaIntegrationTest {
                     receiverName + userDomainName, userDomainName)
                 .createAccount("rmq", serviceDomainName, Utils.parseHexPublicKey(
                     "7a4af859a775dd7c7b4024c97c8118f0280455b8135f6f41422101f0397e0fa5"))
-                .createAsset(asset, serviceDomainName, 0)
+                .createAsset(asset, serviceDomainName, 18)
+                // create project owner acc
+                .createAccount(projectOwnerOne, userDomainName, projectOwnerKeypair.getPublic())
+                .createAccount(projectOwnerTwo, userDomainName, projectOwnerKeypair.getPublic())
+                .createAccount(projectOwnerThree, userDomainName, projectOwnerKeypair.getPublic())
+                // create project participants accs
+                .createAccount(
+                    projectParticipantOne,
+                    userDomainName,
+                    projectOwnerKeypair.getPublic()
+                )
+                .createAccount(
+                    projectParticipantTwo,
+                    userDomainName,
+                    projectOwnerKeypair.getPublic()
+                )
+                .createAccount(
+                    projectParticipantThree,
+                    userDomainName,
+                    projectOwnerKeypair.getPublic()
+                )
+                .createAccount(
+                    projectInfoSetter,
+                    userDomainName,
+                    projectSetterKeypair.getPublic()
+                )
+                .addAssetQuantity(assetId, "1")
                 // transactions in genesis block can be unsigned
                 .build()
+                .build()
+        )
+        .addTransaction(
+            Transaction.builder(projectInfoSetterId)
+                .setAccountDetail(
+                    projectInfoSetterId,
+                    projectOwnerOne + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "PROJECT 1"
+                )
+                .setAccountDetail(
+                    projectInfoSetterId,
+                    projectOwnerTwo + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "PROJECT 2"
+                )
+                .setAccountDetail(
+                    projectInfoSetterId,
+                    projectOwnerThree + ACCOUNT_PLACEHOLDER + userDomainName,
+                    "PROJECT 3"
+                )
+                .sign(projectSetterKeypair)
                 .build()
         )
         .addTransaction(
@@ -171,6 +265,24 @@ public class IrohaIntegrationTest {
             Transaction.builder(senderId)
                 .addAssetQuantity(assetId, "1000000")
                 .sign(senderKeypair)
+                .build()
+        )
+        .addTransaction(
+            Transaction.builder(projectParticipantOneId)
+                .addAssetQuantity(assetId, "1")
+                .sign(projectOwnerKeypair)
+                .build()
+        )
+        .addTransaction(
+            Transaction.builder(projectParticipantTwoId)
+                .addAssetQuantity(assetId, "1")
+                .sign(projectOwnerKeypair)
+                .build()
+        )
+        .addTransaction(
+            Transaction.builder(projectParticipantThreeId)
+                .addAssetQuantity(assetId, "1")
+                .sign(projectOwnerKeypair)
                 .build()
         )
         .build();
@@ -188,15 +300,23 @@ public class IrohaIntegrationTest {
   }
 
   private ValidationServiceImpl getService(IrohaAPI irohaAPI) {
-    final String accountsHolderAccount = String.format("%s@%s", serviceDomainName,
-        serviceDomainName);
-    final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
+    final String accountsHolderAccount = String.format(
+        "%s@%s",
+        serviceDomainName,
+        serviceDomainName
+    );
+    queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
+    final IrohaQueryHelper irohaQueryHelper = new IrohaQueryHelperImpl(
+        queryAPI,
+        ValidationUtils.REGISTRATION_BATCH_SIZE
+    );
     accountManager = new AccountManager(queryAPI,
         "uq",
         userDomainName,
         accountsHolderAccount,
-        accountsHolderAccount,
-        Collections.singletonList(validatorKeypair)
+        validatorId,
+        Collections.singletonList(validatorKeypair),
+        irohaQueryHelper
     );
     transactionVerdictStorage = new MongoTransactionVerdictStorage(mongoHost, mongoPort);
     final Map<String, Rule> ruleMap = new HashMap<>();
@@ -222,7 +342,17 @@ public class IrohaIntegrationTest {
         queryAPI,
         validatorKeypair
     );
+    final BillingInfo billingInfo = mock(BillingInfo.class);
+    when(billingInfo.getFeeFraction()).thenReturn(new BigDecimal("0.1"));
+    when(billingRuleMock.getBillingInfoFor(any(), any(), any())).thenReturn(
+        billingInfo
+    );
     final SimpleAggregationValidator validator = new SimpleAggregationValidator(ruleMap);
+    final ProjectAccountProvider projectAccountProvider = new ProjectAccountProvider(
+        projectInfoSetterId,
+        projectInfoSetterId,
+        irohaQueryHelper
+    );
     return new ValidationServiceImpl(new ValidationServiceContext(
         validator,
         new BasicTransactionProvider(
@@ -230,7 +360,21 @@ public class IrohaIntegrationTest {
             accountManager,
             accountManager,
             brvsIrohaChainListener,
-            userDomainName
+            Arrays.asList(
+                new RegistrationReactionPluggableLogic(
+                    accountManager
+                ),
+                new QuorumReactionPluggableLogic(
+                    accountManager
+                ),
+                new SoraDistributionPluggableLogic(
+                    queryAPI,
+                    projectInfoSetterId,
+                    billingRuleMock,
+                    projectAccountProvider,
+                    irohaQueryHelper
+                )
+            )
         ),
         new TransactionSignerImpl(
             irohaAPI,
@@ -248,7 +392,8 @@ public class IrohaIntegrationTest {
             validatorId,
             validatorConfigId,
             validatorId,
-            validator
+            validator,
+            irohaQueryHelper
         )
     ));
   }
@@ -274,6 +419,15 @@ public class IrohaIntegrationTest {
 
     chainAdapter
         .withEnv("CHAIN-ADAPTER_DROPLASTEREADBLOCK", "true")
+        .withEnv("CHAIN-ADAPTER_IROHACREDENTIAL_ACCOUNTID", validatorId)
+        .withEnv(
+            "CHAIN-ADAPTER_IROHACREDENTIAL_PUBKEY",
+            Utils.toHex(validatorKeypair.getPublic().getEncoded())
+        )
+        .withEnv(
+            "CHAIN-ADAPTER_IROHACREDENTIAL_PRIVKEY",
+            Utils.toHex(validatorKeypair.getPrivate().getEncoded())
+        )
         .withNetwork(iroha.getNetwork())
         .start();
 
@@ -281,12 +435,6 @@ public class IrohaIntegrationTest {
         .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
         .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
         .sign(senderKeypair)
-        .build()
-    );
-    irohaAPI.transactionSync(Transaction.builder(receiverId)
-        .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
-        .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
-        .sign(receiverKeypair)
         .build()
     );
     irohaAPI.transactionSync(Transaction.builder(receiverId)
@@ -586,5 +734,372 @@ public class IrohaIntegrationTest {
         .setAccountDetail(validatorId, ruleName, "false")
         .sign(validatorKeypair)
         .build());
+  }
+
+  /**
+   * @given {@link ValidationService} instance with {@link SoraDistributionPluggableLogic} attached
+   * and relevant JSON with Sora distribution proportions provided
+   * @when {@link Transaction} with {@link iroha.protocol.Commands.Command TransferAsset} command
+   * going from a project owner appears
+   * @then {@link ValidationService} performs needed transfer and settings
+   */
+  @Test
+  void exactDistributionPortions() throws InterruptedException {
+    // projectOwner is a json setter
+    final Map<String, BigDecimal> proportionsMap = new HashMap<>();
+    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.005"));
+    proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
+    proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
+    final BigDecimal totalSupply = new BigDecimal("100000");
+    final BigDecimal rewardToDistribute = new BigDecimal("1000");
+    final SoraDistributionProportions proportions = new SoraDistributionProportions(
+        proportionsMap,
+        totalSupply,
+        rewardToDistribute
+    );
+    final QueryAPI queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
+
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+    BigDecimal twoBalance = getBalance(projectParticipantTwoId);
+    BigDecimal threeBalance = getBalance(projectParticipantThreeId);
+
+    final TransactionBuilder transaction = Transaction
+        .builder(validatorId)
+        .addAssetQuantity(assetId, rewardToDistribute);
+    final BigDecimal validatorBalance = getBalance(validatorId);
+    if (validatorBalance.signum() == 1) {
+      transaction.subtractAssetQuantity(assetId, validatorBalance);
+    }
+    irohaAPI.transaction(transaction.sign(validatorKeypair).build()).blockingLast();
+    final BigDecimal amount = new BigDecimal("300000");
+    irohaAPI.transaction(
+        Transaction.builder(projectInfoSetterId)
+            .addAssetQuantity(assetId, amount)
+            .transferAsset(projectInfoSetterId, projectOwnerOneId, assetId, "", amount)
+            .setAccountDetail(
+                projectOwnerOneId,
+                DISTRIBUTION_PROPORTIONS_KEY,
+                Utils.irohaEscape(gson.toJson(proportions))
+            )
+            .sign(projectSetterKeypair)
+            .build()
+    ).blockingLast();
+
+    final BigDecimal firstAmount = new BigDecimal("60000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerOneId)
+            .transferAsset(projectOwnerOneId, receiverId, assetId, "perevod nomer 1", firstAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    assertEquals(
+        0,
+        oneBalance.add(new BigDecimal("299.95")).compareTo(getBalance(projectParticipantOneId))
+    );
+    assertEquals(
+        0,
+        twoBalance.add(new BigDecimal("179.97")).compareTo(getBalance(projectParticipantTwoId))
+    );
+    assertEquals(
+        0,
+        threeBalance.add(new BigDecimal("119.98")).compareTo(getBalance(projectParticipantThreeId))
+    );
+    final SoraDistributionFinished finished = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_FINISHED_KEY,
+        SoraDistributionFinished.class
+    );
+
+    assertNotNull(finished);
+    assertFalse(finished.getFinished());
+
+    final BigDecimal remaining = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_PROPORTIONS_KEY,
+        SoraDistributionProportions.class
+    ).getRewardToDistribute();
+
+    assertNotNull(remaining);
+    assertEquals(
+        0,
+        remaining.compareTo(new BigDecimal("400"))
+    );
+
+    final BigDecimal secondAmount = firstAmount;
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerOneId)
+            .transferAsset(projectOwnerOneId, receiverId, assetId, "perevod nomer 2", secondAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    assertEquals(
+        0,
+        oneBalance.add(new BigDecimal("299.95")).add(new BigDecimal("199.95"))
+            .compareTo(getBalance(projectParticipantOneId))
+    );
+    assertEquals(
+        0,
+        twoBalance.add(new BigDecimal("179.97")).add(new BigDecimal("119.97"))
+            .compareTo(getBalance(projectParticipantTwoId))
+    );
+    assertEquals(
+
+        0, threeBalance.add(new BigDecimal("119.98")).add(new BigDecimal("79.98"))
+            .compareTo(getBalance(projectParticipantThreeId))
+    );
+    final SoraDistributionFinished finishedNow = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_FINISHED_KEY,
+        SoraDistributionFinished.class
+    );
+
+    assertNotNull(finishedNow);
+    assertTrue(finishedNow.getFinished());
+
+    final BigDecimal remainingNow = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerOneId,
+        validatorId,
+        DISTRIBUTION_PROPORTIONS_KEY,
+        SoraDistributionProportions.class
+    ).getRewardToDistribute();
+
+    assertNotNull(remainingNow);
+    assertEquals(0, remainingNow.compareTo(BigDecimal.ZERO));
+
+    assertEquals(0, BigDecimal.ZERO.compareTo(getBalance(validatorId)));
+  }
+
+  /**
+   * @given {@link ValidationService} instance with {@link SoraDistributionPluggableLogic} attached
+   * and relevant JSON with Sora distribution proportions provided
+   * @when {@link Transaction} with {@link iroha.protocol.Commands.Command TransferAsset} command
+   * going from a project owner appears
+   * @then {@link ValidationService} performs nothing since it has not enough balance
+   */
+  @Test
+  void insufficientDistributionBalance() throws InterruptedException {
+    // projectOwner is a json setter
+    final Map<String, BigDecimal> proportionsMap = new HashMap<>();
+    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.005"));
+    proportionsMap.put(projectParticipantTwoId, new BigDecimal("0.003"));
+    proportionsMap.put(projectParticipantThreeId, new BigDecimal("0.002"));
+    final BigDecimal totalSupply = new BigDecimal("100000");
+    final BigDecimal rewardToDistribute = new BigDecimal("1000");
+    final SoraDistributionProportions proportions = new SoraDistributionProportions(
+        proportionsMap,
+        totalSupply,
+        rewardToDistribute
+    );
+
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+    BigDecimal twoBalance = getBalance(projectParticipantTwoId);
+    BigDecimal threeBalance = getBalance(projectParticipantThreeId);
+
+    final TransactionBuilder transaction = Transaction
+        .builder(validatorId)
+        .addAssetQuantity(assetId, BigDecimal.ONE);
+    final BigDecimal validatorBalance = getBalance(validatorId);
+    if (validatorBalance.signum() == 1) {
+      transaction.subtractAssetQuantity(assetId, validatorBalance);
+    }
+    irohaAPI.transaction(transaction.sign(validatorKeypair).build()).blockingLast();
+    irohaAPI.transaction(
+        Transaction.builder(projectInfoSetterId)
+            .addAssetQuantity(assetId, new BigDecimal("300000"))
+            .transferAsset(projectInfoSetterId, projectOwnerTwoId, assetId, "",
+                new BigDecimal("300000"))
+            .setAccountDetail(
+                projectOwnerTwoId,
+                DISTRIBUTION_PROPORTIONS_KEY,
+                Utils.irohaEscape(gson.toJson(proportions))
+            )
+            .sign(projectSetterKeypair)
+            .build()
+    ).blockingLast();
+
+    final BigDecimal firstAmount = new BigDecimal("60000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerTwoId)
+            .transferAsset(projectOwnerTwoId, receiverId, assetId, "perevod nomer 1", firstAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    // Nothing has changed, no distribution performed
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+    assertEquals(
+        0,
+        twoBalance.compareTo(getBalance(projectParticipantTwoId))
+    );
+    assertEquals(
+        0,
+        threeBalance.compareTo(getBalance(projectParticipantThreeId))
+    );
+  }
+
+  /**
+   * @given {@link ValidationService} instance with {@link SoraDistributionPluggableLogic} attached
+   * and relevant JSON with Sora distribution proportions provided
+   * @when {@link Transaction} with {@link iroha.protocol.Commands.Command TransferAsset} command
+   * going from a project owner appears
+   * @then {@link ValidationService} performs correct distributions
+   */
+  @Test
+  void wildDistributionProportions() throws InterruptedException {
+    // projectOwner is a json setter
+    final Map<String, BigDecimal> proportionsMap = new HashMap<>();
+    proportionsMap.put(projectParticipantOneId, new BigDecimal("0.00142327463691"));
+    final BigDecimal totalSupply = new BigDecimal("12837.0638633542");
+    final BigDecimal rewardToDistribute = new BigDecimal("18.27066740910593086");
+    final SoraDistributionProportions proportions = new SoraDistributionProportions(
+        proportionsMap,
+        totalSupply,
+        rewardToDistribute
+    );
+
+    BigDecimal oneBalance = getBalance(projectParticipantOneId);
+    System.out.println(getBalance(projectParticipantOneId));
+
+    final TransactionBuilder transaction = Transaction
+        .builder(validatorId)
+        .addAssetQuantity(assetId, rewardToDistribute);
+    final BigDecimal validatorBalance = getBalance(validatorId);
+    if (validatorBalance.signum() == 1) {
+      transaction.subtractAssetQuantity(assetId, validatorBalance);
+    }
+    irohaAPI.transaction(transaction.sign(validatorKeypair).build()).blockingLast();
+    irohaAPI.transaction(
+        Transaction.builder(projectInfoSetterId)
+            .addAssetQuantity(assetId, totalSupply.add(BigDecimal.ONE))
+            .transferAsset(projectInfoSetterId, projectOwnerThreeId, assetId, "",
+                totalSupply.add(BigDecimal.ONE))
+            .setAccountDetail(
+                projectOwnerThreeId,
+                DISTRIBUTION_PROPORTIONS_KEY,
+                Utils.irohaEscape(gson.toJson(proportions))
+            )
+            .sign(projectSetterKeypair)
+            .build()
+    ).blockingLast();
+
+    final BigDecimal firstAmount = new BigDecimal("2837.0638633542026");
+    final BigDecimal feeAmount = new BigDecimal("0.1");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 1", firstAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("3.938063367469625560"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal secondAmount = new BigDecimal("4000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 2",
+                secondAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("5.593240875103690999"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal thirdAmount = new BigDecimal("3000");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 3", thirdAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("4.169966238193690999"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final BigDecimal fourthAmount = new BigDecimal("2999.6");
+
+    irohaAPI.transaction(
+        Transaction.builder(projectOwnerThreeId)
+            .transferAsset(projectOwnerThreeId, receiverId, assetId, "perevod nomer 4",
+                fourthAmount)
+            .subtractAssetQuantity(assetId, feeAmount)
+            .sign(projectOwnerKeypair)
+            .build()
+    ).blockingLast();
+
+    Thread.sleep(5000);
+
+    oneBalance = oneBalance.add(new BigDecimal("4.169396928338923297"));
+
+    assertEquals(
+        0,
+        oneBalance.compareTo(getBalance(projectParticipantOneId))
+    );
+
+    final SoraDistributionFinished finishedNow = advancedQueryAccountDetails(
+        queryAPI,
+        projectOwnerThreeId,
+        validatorId,
+        DISTRIBUTION_FINISHED_KEY,
+        SoraDistributionFinished.class
+    );
+
+    assertNotNull(finishedNow);
+    assertTrue(finishedNow.getFinished());
+
+    assertEquals(0, BigDecimal.ZERO.compareTo(getBalance(validatorId)));
+  }
+
+  private BigDecimal getBalance(String accountId) {
+    return new BigDecimal(queryAPI.getAccountAssets(accountId)
+        .getAccountAssetsList().stream().filter(result -> result.getAssetId().equals(assetId))
+        .findAny().get().getBalance());
   }
 }
