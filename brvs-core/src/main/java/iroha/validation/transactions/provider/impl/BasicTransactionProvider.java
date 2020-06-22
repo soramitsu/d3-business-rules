@@ -27,7 +27,6 @@ import iroha.validation.verdict.ValidationResult;
 import iroha.validation.verdict.Verdict;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -124,7 +123,6 @@ public class BasicTransactionProvider implements TransactionProvider {
       logger.error("Pending transactions monitor encountered an error", e);
       System.exit(1);
     }
-    return signatoriesToPresent;
   }
 
   private boolean isBatchSignedByUsers(TransactionBatch transactionBatch,
