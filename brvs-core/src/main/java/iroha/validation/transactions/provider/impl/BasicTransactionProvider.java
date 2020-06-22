@@ -14,7 +14,6 @@ import io.reactivex.Observable;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
-import iroha.protocol.BlockOuterClass.Block;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.listener.BrvsIrohaChainListener;
 import iroha.validation.transactions.TransactionBatch;
@@ -28,7 +27,6 @@ import iroha.validation.verdict.ValidationResult;
 import iroha.validation.verdict.Verdict;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -172,13 +170,8 @@ public class BasicTransactionProvider implements TransactionProvider {
         .observeOn(scheduler)
         .subscribe(blockSubscription -> {
               try {
-                // Store new block first
-                final Block block = blockSubscription.getBlock();
-                processCommitted(
-                    block
-                        .getBlockV1()
-                        .getPayload()
-                        .getTransactionsList()
+                pluggableLogicList.forEach(pluggableLogic ->
+                    pluggableLogic.apply(blockSubscription.getBlock())
                 );
                 blockSubscription.getAcknowledgment().ack();
               } catch (Exception e) {
@@ -188,12 +181,6 @@ public class BasicTransactionProvider implements TransactionProvider {
             }
         );
     irohaReliableChainListener.listen();
-  }
-
-  private void processCommitted(List<Transaction> blockTransactions) {
-    if (blockTransactions != null && !blockTransactions.isEmpty()) {
-      pluggableLogicList.forEach(pluggableLogic -> pluggableLogic.apply(blockTransactions));
-    }
   }
 
   @Override
