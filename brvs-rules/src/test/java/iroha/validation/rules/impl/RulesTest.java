@@ -5,9 +5,13 @@
 
 package iroha.validation.rules.impl;
 
+import static iroha.validation.rules.impl.billing.BillingRule.ASSET_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import iroha.protocol.Commands.Command;
@@ -17,6 +21,9 @@ import iroha.protocol.Commands.TransferAsset;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.rules.Rule;
 import iroha.validation.rules.impl.assets.TransferTxVolumeRule;
+import iroha.validation.rules.impl.billing.BillingInfo;
+import iroha.validation.rules.impl.billing.BillingInfo.BillingTypeEnum;
+import iroha.validation.rules.impl.billing.BillingInfo.FeeTypeEnum;
 import iroha.validation.rules.impl.billing.BillingRule;
 import iroha.validation.rules.impl.byacco.ByaccoDomainInternalAssetRule;
 import iroha.validation.rules.impl.core.MinimumSignatoriesAmountRule;
@@ -26,6 +33,8 @@ import iroha.validation.verdict.Verdict;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.security.KeyPair;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import jp.co.soramitsu.crypto.ed25519.Ed25519Sha3;
@@ -45,15 +54,20 @@ class RulesTest {
   private KeyPair keyPair;
 
   private void init() {
-    asset = "asset";
+    init("asset", "destination@users");
+  }
+
+  private void init(String assetToSave, String destAccountId) {
+    asset = assetToSave;
     // transfer mock
     transaction = mock(Transaction.class, RETURNS_DEEP_STUBS);
     transferAsset = mock(TransferAsset.class);
 
     when(transferAsset.getSrcAccountId()).thenReturn("user@users");
-    when(transferAsset.getDestAccountId()).thenReturn("destination@users");
+    when(transferAsset.getDestAccountId()).thenReturn(destAccountId);
     when(transferAsset.getDescription()).thenReturn("description");
     when(transferAsset.getAssetId()).thenReturn(asset);
+    when(transferAsset.getAmount()).thenReturn("100");
 
     final Command command = mock(Command.class);
 
@@ -61,13 +75,16 @@ class RulesTest {
     when(command.getTransferAsset()).thenReturn(transferAsset);
     when(command.hasRemoveSignatory()).thenReturn(true);
 
-    commands = Collections.singletonList(command);
+    commands = new ArrayList<>();
+    commands.add(command);
 
     when(transaction
         .getPayload()
         .getReducedPayload()
         .getCommandsList())
         .thenReturn(commands);
+    when(transaction.getPayload().getReducedPayload().getCreatorAccountId())
+        .thenReturn("user@users");
   }
 
   private void initTransferTxVolumeTest() {
@@ -75,11 +92,25 @@ class RulesTest {
     rule = new TransferTxVolumeRule(asset, BigDecimal.TEN);
   }
 
-  private void initBillingTest() throws IOException {
-    init();
-    when(transaction.getPayload().getReducedPayload().getCreatorAccountId())
-        .thenReturn("user@users");
-    when(transaction.getPayload().getBatch().getReducedHashesCount()).thenReturn(1);
+  private void initJustBillingTest(boolean withFee) throws IOException {
+    if (withFee) {
+      subtractAssetQuantity = mock(SubtractAssetQuantity.class);
+      when(subtractAssetQuantity.getAmount()).thenReturn("0.1");
+      when(subtractAssetQuantity.getAssetId()).thenReturn(asset);
+      final Command command = mock(Command.class);
+
+      when(command.hasSubtractAssetQuantity()).thenReturn(true);
+      when(command.getSubtractAssetQuantity()).thenReturn(subtractAssetQuantity);
+
+      commands.add(command);
+
+      when(transaction
+          .getPayload()
+          .getReducedPayload()
+          .getCommandsList())
+          .thenReturn(commands);
+    }
+
     rule = new BillingRule("http://url",
         "rmqHost",
         1,
@@ -88,12 +119,56 @@ class RulesTest {
         "users",
         "deposit@users",
         "withdrawaleth@users",
-        "withdrawalbtc@users"
+        "withdrawalbtc@users",
+        "exchanger@notary"
     ) {
       @Override
       protected void runCacheUpdater() {
       }
     };
+  }
+
+  private void initBillingTest(boolean withFee, String assetToSave, String destAccountId)
+      throws IOException {
+    init(assetToSave, destAccountId);
+    initJustBillingTest(withFee);
+  }
+
+  private void initBillingTest(boolean withFee) throws IOException {
+    init();
+    initJustBillingTest(withFee);
+  }
+
+  private void initBillingExchangerTest(boolean withFee) throws IOException {
+    initBillingTest(withFee, ASSET_ID, "exchanger@notary");
+
+    final BillingRule billingRule = spy(new BillingRule("http://url",
+        "rmqHost",
+        1,
+        "exchange",
+        "key",
+        "users",
+        "deposit@users",
+        "withdrawaleth@users",
+        "withdrawalbtc@users",
+        "exchanger@notary"
+    ) {
+      @Override
+      protected void runCacheUpdater() {
+      }
+    });
+    when(billingRule.getBillingInfoFor(any(), eq(ASSET_ID), eq(BillingTypeEnum.EXCHANGE)))
+        .thenReturn(
+            new BillingInfo(
+                "users",
+                BillingTypeEnum.EXCHANGE,
+                ASSET_ID,
+                FeeTypeEnum.FIXED,
+                new BigDecimal("0.1"),
+                0
+            )
+        );
+    rule = billingRule;
   }
 
   private void initRestrictedKeysRuleTest(boolean bad) {
@@ -195,10 +270,7 @@ class RulesTest {
    */
   @Test
   void emptyBillingRuleGoodTest() throws IOException {
-    initBillingTest();
-
-    when(transferAsset.getAssetId()).thenReturn(asset);
-    when(transferAsset.getAmount()).thenReturn(BigDecimal.valueOf(100).toPlainString());
+    initBillingTest(false);
 
     assertEquals(Verdict.VALIDATED, rule.isSatisfiedBy(transaction).getStatus());
   }
@@ -211,23 +283,7 @@ class RulesTest {
    */
   @Test
   void emptyBillingRuleBadTest() throws IOException {
-    initBillingTest();
-
-    subtractAssetQuantity = mock(SubtractAssetQuantity.class);
-    when(subtractAssetQuantity.getAmount()).thenReturn(BigDecimal.valueOf(100).toPlainString());
-    when(subtractAssetQuantity.getAssetId()).thenReturn(asset);
-    final Command command = mock(Command.class);
-
-    when(command.hasSubtractAssetQuantity()).thenReturn(true);
-    when(command.getSubtractAssetQuantity()).thenReturn(subtractAssetQuantity);
-
-    commands = Collections.singletonList(command);
-
-    when(transaction
-        .getPayload()
-        .getReducedPayload()
-        .getCommandsList())
-        .thenReturn(commands);
+    initBillingTest(true);
 
     assertEquals(Verdict.REJECTED, rule.isSatisfiedBy(transaction).getStatus());
   }
@@ -283,27 +339,27 @@ class RulesTest {
   }
 
   /**
-   * @given {@link ByaccoDomainInternalAssetRule} instance with configured domain and asset id
-   * @when {@link Transaction} with {@link Command TransferAsset} command with the asset and a valid
-   * domain appears
-   * @then {@link ByaccoDomainInternalAssetRule} is satisfied by such {@link Transaction}
+   * @given {@link BillingRule} instance with billing data
+   * @when {@link Transaction} with the proper {@link Command TransferAsset} command of 100
+   * "xor#sora" passed and {@link Command SubtractAssetQty} fee
+   * @then {@link BillingRule} is satisfied by such {@link Transaction}
    */
   @Test
-  void interDomainAssetGoodRuleTest() {
-    initInternalTransferTest(false);
+  void correctExchangerGoodRuleTest() throws IOException {
+    initBillingExchangerTest(true);
 
     assertEquals(Verdict.VALIDATED, rule.isSatisfiedBy(transaction).getStatus());
   }
 
   /**
-   * @given {@link ByaccoDomainInternalAssetRule} instance with configured domain and asset id
-   * @when {@link Transaction} with {@link Command TransferAsset} command with the asset and an
-   * invalid domain appears
-   * @then {@link ByaccoDomainInternalAssetRule} is not satisfied by such {@link Transaction}
+   * @given {@link BillingRule} instance with billing data
+   * @when {@link Transaction} with the proper {@link Command TransferAsset} command of 100
+   * "xor#sora" passed but no {@link Command SubtractAssetQty} fee set
+   * @then {@link BillingRule} is rejected by such {@link Transaction}
    */
   @Test
-  void interDomainAssetGoodBadTest() {
-    initInternalTransferTest(true);
+  void incorrectExchangerGoodRuleTest() throws IOException {
+    initBillingExchangerTest(false);
 
     assertEquals(Verdict.REJECTED, rule.isSatisfiedBy(transaction).getStatus());
   }
