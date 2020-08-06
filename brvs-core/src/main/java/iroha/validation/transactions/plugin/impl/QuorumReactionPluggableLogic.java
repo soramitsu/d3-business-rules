@@ -12,7 +12,7 @@ import iroha.protocol.BlockOuterClass.Block;
 import iroha.protocol.Commands.Command;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.plugin.PluggableLogic;
-import iroha.validation.transactions.provider.impl.AccountManager;
+import iroha.validation.transactions.core.provider.impl.AccountManager;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;

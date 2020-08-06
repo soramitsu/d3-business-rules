@@ -15,7 +15,7 @@ import iroha.protocol.Commands.Command;
 import iroha.protocol.Commands.CreateAccount;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.plugin.impl.RegistrationReactionPluggableLogic;
-import iroha.validation.transactions.provider.RegistrationProvider;
+import iroha.validation.transactions.core.provider.RegistrationProvider;
 import java.util.Collections;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;

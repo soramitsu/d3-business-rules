@@ -15,7 +15,7 @@ import iroha.protocol.TransactionOuterClass.Transaction.Payload;
 import iroha.protocol.TransactionOuterClass.Transaction.Payload.ReducedPayload;
 import iroha.validation.exception.BrvsException;
 import iroha.validation.transactions.plugin.PluggableLogic;
-import iroha.validation.transactions.provider.RegistrationProvider;
+import iroha.validation.transactions.core.provider.RegistrationProvider;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;

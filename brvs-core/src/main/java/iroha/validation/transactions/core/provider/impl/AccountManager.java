@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package iroha.validation.transactions.provider.impl;
+package iroha.validation.transactions.core.provider.impl;
 
 import static iroha.validation.exception.BrvsErrorCode.REGISTRATION_FAILED;
 import static iroha.validation.exception.BrvsErrorCode.REGISTRATION_TIMEOUT;
@@ -17,7 +17,6 @@ import static iroha.validation.utils.ValidationUtils.sendWithLastResponseWaiting
 import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
 import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
-import com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -25,9 +24,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import iroha.protocol.Endpoint.TxStatus;
 import iroha.validation.exception.BrvsException;
-import iroha.validation.transactions.provider.RegistrationProvider;
-import iroha.validation.transactions.provider.UserQuorumProvider;
-import iroha.validation.transactions.provider.impl.util.RegistrationAwaiterWrapper;
+import iroha.validation.transactions.core.provider.RegistrationProvider;
+import iroha.validation.transactions.core.provider.UserQuorumProvider;
+import iroha.validation.transactions.core.provider.impl.util.RegistrationAwaiterWrapper;
 import iroha.validation.utils.ValidationUtils;
 import java.io.Closeable;
 import java.lang.reflect.Type;

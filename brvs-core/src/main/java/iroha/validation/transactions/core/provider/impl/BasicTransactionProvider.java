@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package iroha.validation.transactions.provider.impl;
+package iroha.validation.transactions.core.provider.impl;
 
 import static com.d3.commons.util.ThreadUtilKt.createPrettyScheduledThreadPool;
 import static com.d3.commons.util.ThreadUtilKt.createPrettySingleThreadPool;
@@ -18,10 +18,10 @@ import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.listener.BrvsIrohaChainListener;
 import iroha.validation.transactions.TransactionBatch;
 import iroha.validation.transactions.plugin.PluggableLogic;
-import iroha.validation.transactions.provider.RegistrationProvider;
-import iroha.validation.transactions.provider.TransactionProvider;
-import iroha.validation.transactions.provider.UserQuorumProvider;
-import iroha.validation.transactions.storage.TransactionVerdictStorage;
+import iroha.validation.transactions.core.provider.RegistrationProvider;
+import iroha.validation.transactions.core.provider.TransactionProvider;
+import iroha.validation.transactions.core.provider.UserQuorumProvider;
+import iroha.validation.transactions.core.storage.TransactionVerdictStorage;
 import iroha.validation.utils.ValidationUtils;
 import iroha.validation.verdict.ValidationResult;
 import iroha.validation.verdict.Verdict;

@@ -64,14 +64,14 @@
 
   <!-- STORAGE CONFIG -->
   <bean id="mongoVerdictStorage"
-    class="iroha.validation.transactions.storage.impl.mongo.MongoTransactionVerdictStorage">
+    class="iroha.validation.transactions.core.storage.impl.mongo.MongoTransactionVerdictStorage">
     <constructor-arg name="mongoHost" value="${MONGO_HOST}"/>
     <constructor-arg name="mongoPort" value="${MONGO_PORT}"/>
   </bean>
 
   <!-- USER ACCOUNTS MANAGER CONFIG -->
   <bean id="accountManager"
-    class="iroha.validation.transactions.provider.impl.AccountManager">
+    class="iroha.validation.transactions.core.provider.impl.AccountManager">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
     <constructor-arg name="userSignatoriesAttribute" value="${USER_SIGNATORIES_KEY}"/>
     <constructor-arg name="userDomains" value="${BRVS_USERDOMAINS}"/>
@@ -144,7 +144,7 @@
 
   <!-- PROVIDER CONFIG -->
   <bean id="transactionProvider"
-    class="iroha.validation.transactions.provider.impl.BasicTransactionProvider">
+    class="iroha.validation.transactions.core.provider.impl.BasicTransactionProvider">
     <constructor-arg name="transactionVerdictStorage" ref="mongoVerdictStorage"/>
     <constructor-arg name="userQuorumProvider" ref="accountManager"/>
     <constructor-arg name="registrationProvider" ref="accountManager"/>
@@ -164,7 +164,7 @@
 
   <!-- SIGNER CONFIG -->
   <bean id="transactionSigner"
-    class="iroha.validation.transactions.signatory.impl.TransactionSignerImpl">
+    class="iroha.validation.transactions.core.signatory.impl.TransactionSignerImpl">
     <constructor-arg name="irohaAPI" ref="irohaAPI"/>
     <constructor-arg name="brvsAccountId" value="${CREDENTIAL_ACCOUNTID}"/>
     <constructor-arg name="brvsAccountKeyPair" ref="brvsAccountKeyPair"/>
@@ -177,7 +177,7 @@
   <bean id="pubkey" class="java.lang.String">
     <constructor-arg name="original" value="${CREDENTIAL_PUBKEY}"/>
   </bean>
-  <bean id="brvsData" class="iroha.validation.transactions.provider.impl.util.BrvsData">
+  <bean id="brvsData" class="iroha.validation.transactions.core.provider.impl.util.BrvsData">
     <constructor-arg name="hexPubKey" ref="pubkey"/>
     <constructor-arg name="hostname" value="${BRVS_LOCALHOSTNAME}"/>
   </bean>

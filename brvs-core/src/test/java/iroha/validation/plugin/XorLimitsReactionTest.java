@@ -29,7 +29,7 @@ import iroha.protocol.Endpoint.TxStatus;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.rules.impl.sora.XorWithdrawalLimitRule.XorWithdrawalLimitRemainder;
 import iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic;
-import iroha.validation.transactions.provider.RegistrationProvider;
+import iroha.validation.transactions.core.provider.RegistrationProvider;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;

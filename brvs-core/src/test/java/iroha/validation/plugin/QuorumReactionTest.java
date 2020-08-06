@@ -19,7 +19,7 @@ import iroha.protocol.Commands.AddSignatory;
 import iroha.protocol.Commands.Command;
 import iroha.protocol.TransactionOuterClass.Transaction;
 import iroha.validation.transactions.plugin.impl.QuorumReactionPluggableLogic;
-import iroha.validation.transactions.provider.impl.AccountManager;
+import iroha.validation.transactions.core.provider.impl.AccountManager;
 import java.util.Collections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
