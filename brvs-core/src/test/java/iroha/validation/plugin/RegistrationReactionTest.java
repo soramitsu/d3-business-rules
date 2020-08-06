@@ -41,8 +41,7 @@ public class RegistrationReactionTest {
         registrationProvider
     );
     when(registrationProvider.getUserDomains()).thenReturn(Collections.singleton(DOMAIN));
-    when(registrationProvider.getUserAccounts())
-        .thenReturn(Collections.singleton(USER_ID));
+    when(registrationProvider.isUserAccount(USER_ID)).thenReturn(true);
     final Command command = mock(Command.class);
     final CreateAccount createAccount = mock(CreateAccount.class);
     when(createAccount.getAccountName()).thenReturn(USERNAME);

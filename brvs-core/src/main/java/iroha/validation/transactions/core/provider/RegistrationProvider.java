@@ -6,7 +6,9 @@
 package iroha.validation.transactions.core.provider;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 public interface RegistrationProvider {
 
@@ -25,18 +27,11 @@ public interface RegistrationProvider {
   void register(Collection<String> accountIds) throws InterruptedException;
 
   /**
-   * Method for getting all the registered user accounts
+   * Queries Iroha for all unregistered user accounts and applies the logic supplied
    *
-   * @return {@link Set} of registered user accounts
+   * @param method {@link Function} to apply to unregistered accounts
    */
-  Set<String> getRegisteredAccounts();
-
-  /**
-   * Queries Iroha for all user accounts
-   *
-   * @return {@link Set} of user accounts
-   */
-  Set<String> getUserAccounts();
+  void processUnregisteredUserAccounts(Function<Set<String>, Object> method);
 
   /**
    * Provides the set of supported user domains of the instance
@@ -44,4 +39,20 @@ public interface RegistrationProvider {
    * @return {@link Set} of strings representing user domains in Iroha
    */
   Set<String> getUserDomains();
+
+  /**
+   * Method for checking if there is the user account given registered already
+   *
+   * @param accountId client account id in Iroha
+   * @return true if there is a specified user registered
+   */
+  boolean isRegistered(String accountId);
+
+  /**
+   * Method for checking if there is the user account with the id provided
+   *
+   * @param accountId client account id in Iroha
+   * @return true if there is a specified user in the system
+   */
+  boolean isUserAccount(String accountId);
 }

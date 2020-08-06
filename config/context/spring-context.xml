@@ -59,12 +59,18 @@
   <!-- IROHA QUERY HELPER CONFIG -->
   <bean id="queryHelper" class="com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
-    <constructor-arg name="pageSize" type="int" value="500"/>
+    <constructor-arg name="pageSize" type="int" value="200"/>
   </bean>
 
-  <!-- STORAGE CONFIG -->
+  <!-- VERDICT STORAGE CONFIG -->
   <bean id="mongoVerdictStorage"
     class="iroha.validation.transactions.core.storage.impl.mongo.MongoTransactionVerdictStorage">
+    <constructor-arg name="mongoHost" value="${MONGO_HOST}"/>
+    <constructor-arg name="mongoPort" value="${MONGO_PORT}"/>
+  </bean>
+
+  <!-- USER STORAGE CONFIG -->
+  <bean id="userStorage" class="iroha.validation.transactions.core.provider.impl.RegisteredUsersStorageImpl">
     <constructor-arg name="mongoHost" value="${MONGO_HOST}"/>
     <constructor-arg name="mongoPort" value="${MONGO_PORT}"/>
   </bean>
@@ -79,6 +85,7 @@
     <constructor-arg name="userAccountsSetterAccount" value="${ACCOUNTS_HOLDER_SETTER}"/>
     <constructor-arg name="keyPairs" ref="keysList"/>
     <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
+    <constructor-arg name="registeredUsersStorage" ref="userStorage"/>
   </bean>
 
   <!--  SORA PROJECT PROVIDER CONFIG-->
@@ -146,10 +153,11 @@
   <bean id="transactionProvider"
     class="iroha.validation.transactions.core.provider.impl.BasicTransactionProvider">
     <constructor-arg name="transactionVerdictStorage" ref="mongoVerdictStorage"/>
-    <constructor-arg name="userQuorumProvider" ref="accountManager"/>
+    <constructor-arg name="userQuorumProdvider" ref="accountManager"/>
     <constructor-arg name="registrationProvider" ref="accountManager"/>
     <constructor-arg name="irohaReliableChainListener" ref="irohaReliableChainListener"/>
     <constructor-arg name="pluggableLogicList" ref="logicList"/>
+    <constructor-arg name="pendingPollingPeriod" value="${PENDING_POLLING_PERIOD}"/>
   </bean>
 
   <!-- CHAIN LISTENER CONFIG -->
@@ -160,6 +168,7 @@
     <constructor-arg name="rmqConfig" ref="rmqConfig"/>
     <constructor-arg name="queryAPI" ref="queryAPI"/>
     <constructor-arg name="userKeyPair" ref="firstUserKey"/>
+    <constructor-arg name="registeredUsersStorage" ref="userStorage"/>
   </bean>
 
   <!-- SIGNER CONFIG -->

@@ -68,9 +68,7 @@ public class BusinessController {
         .fromJson(jsonBody, AccountIdJsonWrapper.class)
         .getAccountId();
     fieldValidator.checkAccountId(accountId);
-    final boolean isRegistered = registrationProvider.getRegisteredAccounts()
-        .stream()
-        .anyMatch(registeredAccount -> registeredAccount.equals(accountId));
+    final boolean isRegistered = registrationProvider.isRegistered(accountId);
     return Response.ok(new AccountRegisteredResponse(isRegistered)).build();
   }
 
