@@ -339,12 +339,13 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
   public boolean isUserAccount(String userAccountId) {
     try {
       final int delimiterIndex = userAccountId.indexOf(accountIdDelimiter);
-      final String suffix = userAccountId.substring(delimiterIndex);
+      final String suffix = userAccountId.substring(delimiterIndex + 1);
+      final String replacedSuffix = suffix.replace(".", "_");
       return irohaQueryHelper.getAccountDetails(
           userAccountsHolderAccount,
           userAccountsSetterAccount,
-          userAccountId.substring(0, delimiterIndex) + suffix.replace(".", "_")
-      ).get().isPresent();
+          userAccountId.substring(0, delimiterIndex) + replacedSuffix
+      ).get().orElse("").equals(replacedSuffix);
     } catch (Exception e) {
       logger.error("Error during checking user account: " + userAccountId, e);
       return false;

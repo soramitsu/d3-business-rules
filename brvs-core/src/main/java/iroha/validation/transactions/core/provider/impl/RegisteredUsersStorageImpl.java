@@ -46,18 +46,19 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
   @Override
   public <T> Set<T> process(Function<Iterable<String>, Collection<T>> method) {
     final Set<T> resultSet = new HashSet<>();
-    int pageCounter = 1;
+    int pageCounter = 0;
     Set<String> accountsPage;
     do {
       accountsPage = getAccountsPage(pageCounter);
       resultSet.addAll(method.apply(accountsPage));
+      pageCounter++;
     } while (!accountsPage.isEmpty());
     return resultSet;
   }
 
   private Set<String> getAccountsPage(int pageNum) {
     final Set<String> accountsPage = new HashSet<>();
-    collection.find().skip(DEFAULT_PAGE_SIZE * (pageNum - 1)).limit(DEFAULT_PAGE_SIZE).forEach(
+    collection.find().skip(DEFAULT_PAGE_SIZE * pageNum).limit(DEFAULT_PAGE_SIZE).forEach(
         (Consumer<? super UserAccountId>) account -> accountsPage.add(account.getUserId())
     );
     return accountsPage;
