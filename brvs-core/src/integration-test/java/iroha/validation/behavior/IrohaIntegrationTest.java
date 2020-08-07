@@ -40,6 +40,8 @@ import iroha.validation.rules.impl.billing.BillingRule;
 import iroha.validation.rules.impl.core.SampleRule;
 import iroha.validation.service.ValidationService;
 import iroha.validation.service.impl.ValidationServiceImpl;
+import iroha.validation.transactions.core.provider.RegisteredUsersStorage;
+import iroha.validation.transactions.core.provider.impl.RegisteredUsersStorageImpl;
 import iroha.validation.transactions.plugin.impl.QuorumReactionPluggableLogic;
 import iroha.validation.transactions.plugin.impl.RegistrationReactionPluggableLogic;
 import iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider;
@@ -306,17 +308,16 @@ public class IrohaIntegrationTest {
         serviceDomainName
     );
     queryAPI = new QueryAPI(irohaAPI, validatorId, validatorKeypair);
-    final IrohaQueryHelper irohaQueryHelper = new IrohaQueryHelperImpl(
-        queryAPI,
-        ValidationUtils.REGISTRATION_BATCH_SIZE
-    );
+    final IrohaQueryHelper irohaQueryHelper = new IrohaQueryHelperImpl(queryAPI);
+    final RegisteredUsersStorage usersStorage = new RegisteredUsersStorageImpl(mongoHost, mongoPort);
     accountManager = new AccountManager(queryAPI,
         "uq",
         userDomainName,
         accountsHolderAccount,
         validatorId,
         Collections.singletonList(validatorKeypair),
-        irohaQueryHelper
+        irohaQueryHelper,
+        usersStorage
     );
     transactionVerdictStorage = new MongoTransactionVerdictStorage(mongoHost, mongoPort);
     final Map<String, Rule> ruleMap = new HashMap<>();
@@ -340,7 +341,8 @@ public class IrohaIntegrationTest {
           }
         },
         queryAPI,
-        validatorKeypair
+        validatorKeypair,
+        usersStorage
     );
     final BillingInfo billingInfo = mock(BillingInfo.class);
     when(billingInfo.getFeeFraction()).thenReturn(new BigDecimal("0.1"));
@@ -374,7 +376,8 @@ public class IrohaIntegrationTest {
                     projectAccountProvider,
                     irohaQueryHelper
                 )
-            )
+            ),
+            "2"
         ),
         new TransactionSignerImpl(
             irohaAPI,

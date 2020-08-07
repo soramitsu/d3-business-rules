@@ -49,7 +49,7 @@ dependencies {
 
     compile project(':brvs-rules')
     // Notary
-    compile('com.github.soramitsu.soranet-validator:notary-commons:cc6b5f1398a7d966468347f22af974f7bb12dff8') {
+    compile('com.github.soramitsu.soranet-validator:notary-commons:3d28d540979501fec2dd5091747873085df1a3fb') {
         exclude group: 'com.github.hyperledger.iroha-java', module: 'client'
     }
     // Chain adapter

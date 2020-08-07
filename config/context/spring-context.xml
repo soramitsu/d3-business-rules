@@ -59,7 +59,6 @@
   <!-- IROHA QUERY HELPER CONFIG -->
   <bean id="queryHelper" class="com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
-    <constructor-arg name="pageSize" type="int" value="200"/>
   </bean>
 
   <!-- VERDICT STORAGE CONFIG -->
