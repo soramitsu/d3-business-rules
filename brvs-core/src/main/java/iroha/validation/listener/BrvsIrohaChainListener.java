@@ -91,7 +91,7 @@ public class BrvsIrohaChainListener implements Closeable {
   /**
    * Queries pending transactions for a specified account and keypair
    *
-   * @param accountId user whos transactions should be queried for
+   * @param accountId user whose transactions should be queried for
    * @param keyPair user keypair
    * @return list of user transactions that are in pending state
    */
@@ -104,7 +104,7 @@ public class BrvsIrohaChainListener implements Closeable {
   /**
    * Queries pending transactions for a specified iterable of accounts and the keypair
    *
-   * @param accountIds users whos transactions should be queried for
+   * @param accountIds users whose transactions should be queried for
    * @return list of user transactions that are in pending state
    */
   private List<TransactionBatch> getPendingTransactionsForManyAccounts(
