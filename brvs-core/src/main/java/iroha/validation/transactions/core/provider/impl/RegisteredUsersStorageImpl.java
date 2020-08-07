@@ -20,7 +20,7 @@ import java.util.function.Function;
 public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
     implements RegisteredUsersStorage {
 
-  private static final ReplaceOptions optionsToKeep = new ReplaceOptions().upsert(false);
+  private static final ReplaceOptions optionsToReplace = new ReplaceOptions().upsert(true);
   private static final String USER_NAME_ATTRIBUTE = "userId";
   private static final int DEFAULT_PAGE_SIZE = 500;
   private static final String DEFAULT_DB_NAME = "userStorage";
@@ -34,13 +34,13 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
   public void add(String accountId) {
     collection.replaceOne(eq(USER_NAME_ATTRIBUTE, accountId),
         new UserAccountId(accountId),
-        optionsToKeep
+        optionsToReplace
     );
   }
 
   @Override
   public boolean contains(String accountId) {
-    return collection.find(eq(USER_NAME_ATTRIBUTE, accountId)).first() == null;
+    return collection.find(eq(USER_NAME_ATTRIBUTE, accountId)).first() != null;
   }
 
   @Override
@@ -66,7 +66,7 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
 
   public static class UserAccountId {
 
-    private final String userId;
+    private String userId;
 
     public UserAccountId(String userId) {
       this.userId = userId;
@@ -74,6 +74,16 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
 
     public String getUserId() {
       return userId;
+    }
+
+    // for mongo deserialization
+
+    public UserAccountId() {
+
+    }
+
+    public void setUserId(String userId) {
+      this.userId = userId;
     }
   }
 }
