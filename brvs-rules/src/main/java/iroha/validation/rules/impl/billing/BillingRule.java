@@ -306,14 +306,11 @@ public class BillingRule implements Rule {
       List<TransferAsset> transfers,
       List<SubtractAssetQuantity> feesAsBurns) {
     for (TransferAsset transferAsset : transfers) {
-      final String transferAssetId = transferAsset.getAssetId();
-      final String assetDomain = BillingInfo.getAssetDomain(transferAssetId);
       final BillingTypeEnum originalType = getBillingType(transferAsset);
       if (originalType != null) {
         final BillingInfo billingInfo = getBillingInfoFor(
             BillingInfo.getDomain(transferAsset.getSrcAccountId()),
-            // enforce xor for any fee for fiat transfers
-            FIAT_DOMAIN.equals(assetDomain) ? XOR_ASSET_ID : transferAssetId,
+            getAssetIdForFee(transferAsset),
             originalType
         );
         // Not billable operation
@@ -340,15 +337,22 @@ public class BillingRule implements Rule {
     return ValidationResult.VALIDATED;
   }
 
+  private String getAssetIdForFee(TransferAsset transferAsset) {
+    final String transferAssetId = transferAsset.getAssetId();
+    final String assetDomain = BillingInfo.getAssetDomain(transferAssetId);
+    // enforce xor for any fee for fiat transfers
+    return FIAT_DOMAIN.equals(assetDomain) ? XOR_ASSET_ID : transferAssetId;
+  }
+
   private boolean findAndRemoveFee(TransferAsset transfer,
       List<SubtractAssetQuantity> burnableFees,
       BillingInfo billingInfo) {
 
     final BigDecimal amount = new BigDecimal(transfer.getAmount());
     final BigDecimal relevantFeeAmount = calculateRelevantFeeAmount(amount, billingInfo);
-
+    final String assetIdForFee = getAssetIdForFee(transfer);
     for (SubtractAssetQuantity fee : burnableFees) {
-      if (fee.getAssetId().equals(XOR_ASSET_ID)
+      if (fee.getAssetId().equals(assetIdForFee)
           && new BigDecimal(fee.getAmount())
           .compareTo(relevantFeeAmount) == 0) {
         // To prevent case when there are two identical operations and only one fee
@@ -359,7 +363,7 @@ public class BillingRule implements Rule {
     logger.warn(
         "Corresponding fee is not found for the transfer. Must be: "
             + relevantFeeAmount + " "
-            + XOR_ASSET_ID
+            + assetIdForFee
     );
     return false;
   }
