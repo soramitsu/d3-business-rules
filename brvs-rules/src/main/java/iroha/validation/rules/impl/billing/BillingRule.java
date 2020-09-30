@@ -55,7 +55,8 @@ public class BillingRule implements Rule {
 
   private static final Logger logger = LoggerFactory.getLogger(BillingRule.class);
 
-  public static final String ASSET_ID = "xor#sora";
+  public static final String XOR_ASSET_ID = "xor#sora";
+  public static final String FIAT_DOMAIN = "xst";
   private static final String SEPARATOR = ",";
   private static final String QUEUE_NAME = "brvs_billing_updates";
   private static final String BILLING_ERROR_MESSAGE = "Couldn't request primary billing information.";
@@ -305,12 +306,14 @@ public class BillingRule implements Rule {
       List<TransferAsset> transfers,
       List<SubtractAssetQuantity> feesAsBurns) {
     for (TransferAsset transferAsset : transfers) {
+      final String transferAssetId = transferAsset.getAssetId();
+      final String assetDomain = BillingInfo.getAssetDomain(transferAssetId);
       final BillingTypeEnum originalType = getBillingType(transferAsset);
       if (originalType != null) {
         final BillingInfo billingInfo = getBillingInfoFor(
             BillingInfo.getDomain(transferAsset.getSrcAccountId()),
-            // enforce xor for any fee
-            ASSET_ID,
+            // enforce xor for any fee for fiat transfers
+            FIAT_DOMAIN.equals(assetDomain) ? XOR_ASSET_ID : transferAssetId,
             originalType
         );
         // Not billable operation
@@ -345,7 +348,7 @@ public class BillingRule implements Rule {
     final BigDecimal relevantFeeAmount = calculateRelevantFeeAmount(amount, billingInfo);
 
     for (SubtractAssetQuantity fee : burnableFees) {
-      if (fee.getAssetId().equals(ASSET_ID)
+      if (fee.getAssetId().equals(XOR_ASSET_ID)
           && new BigDecimal(fee.getAmount())
           .compareTo(relevantFeeAmount) == 0) {
         // To prevent case when there are two identical operations and only one fee
@@ -356,7 +359,7 @@ public class BillingRule implements Rule {
     logger.warn(
         "Corresponding fee is not found for the transfer. Must be: "
             + relevantFeeAmount + " "
-            + ASSET_ID
+            + XOR_ASSET_ID
     );
     return false;
   }
