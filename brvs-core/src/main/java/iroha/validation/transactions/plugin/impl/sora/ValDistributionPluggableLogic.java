@@ -5,6 +5,7 @@
 
 package iroha.validation.transactions.plugin.impl.sora;
 
+import static iroha.validation.rules.impl.billing.BillingRule.XOR_ASSET_ID;
 import static iroha.validation.utils.ValidationUtils.sendWithLastResponseWaiting;
 
 import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
@@ -38,8 +39,7 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
 
   private static final Logger logger = LoggerFactory.getLogger(ValDistributionPluggableLogic.class);
   private static final String SORA_DOMAIN = "sora";
-  private static final String VAL_ASSET_ID = "val#" + SORA_DOMAIN;
-  private static final String XOR_ASSET_ID = "xor#" + SORA_DOMAIN;
+  public static final String VAL_ASSET_ID = "val#" + SORA_DOMAIN;
   private static final String VAL_AIRDROP_DESCRIPTION = "VAL airdrop";
   private static final int VAL_PRECISION = 18;
   private static final MathContext VAL_MATH_CONTEXT = new MathContext(
