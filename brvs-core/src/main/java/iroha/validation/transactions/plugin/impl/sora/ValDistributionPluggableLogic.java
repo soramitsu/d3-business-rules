@@ -139,7 +139,7 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
   private BigDecimal getUserProportion(
       String userAccount) {
     return new BigDecimal(irohaQueryHelper.getAccountAsset(userAccount, XOR_ASSET_ID).get())
-        .divide(totalProportionPool, RoundingMode.DOWN);
+        .divide(totalProportionPool, VAL_PRECISION, RoundingMode.DOWN);
   }
 
   private void constructAndSendDistributions(
@@ -169,8 +169,10 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
         toBurn.get()
     );
 
-    final TxStatus txStatus = sendWithLastResponseWaiting(irohaAPI,
-        transactionBuilder.sign(brvsKeypair).build()).getTxStatus();
+    final TxStatus txStatus = sendWithLastResponseWaiting(
+        irohaAPI,
+        transactionBuilder.sign(brvsKeypair).build()
+    ).getTxStatus();
     if (!txStatus.equals(TxStatus.COMMITTED)) {
       throw new IllegalStateException(
           "Could not send VAL distribution. Got transaction status: " + txStatus.name()
