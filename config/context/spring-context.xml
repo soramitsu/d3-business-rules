@@ -124,7 +124,7 @@
   </bean>
 
   <!--  VAL DISTRIBUTION CONFIG-->
-  <bean id="vaDistributionLogic"
+  <bean id="valDistributionLogic"
     class="iroha.validation.transactions.plugin.impl.sora.ValDistributionPluggableLogic">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
     <constructor-arg name="infoSetterAccount" value="${SORA_DISTRIBUTION_SETTER}"/>
