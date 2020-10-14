@@ -112,7 +112,7 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
     if (amountToDistribute.signum() != 1) {
       return;
     }
-    logger.info("Triggered VAL distribution of " + amountToDistribute.toPlainString() + " VALs");
+    logger.info("Triggered VAL distribution of {} VALs", amountToDistribute.toPlainString());
     final Set<DistributionEntry> transactionsContext =
         registeredUsersStorage.process((userAccounts) ->
             StreamSupport.stream(userAccounts.spliterator(), false)

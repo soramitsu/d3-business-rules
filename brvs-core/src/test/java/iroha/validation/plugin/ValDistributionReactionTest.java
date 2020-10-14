@@ -40,7 +40,7 @@ import org.mockito.ArgumentCaptor;
 public class ValDistributionReactionTest {
 
   private static final String BRVS_ID = "sora@brvs";
-  private static final String SUPERUSER__ID = "superuser@bootstrap";
+  private static final String SUPERUSER_ID = "superuser@bootstrap";
   private static final String USER_ID = "user@sora";
   private static final String TOTAL_AMOUNT = "100";
   private static final String USER_AMOUNT = "50";
@@ -54,10 +54,10 @@ public class ValDistributionReactionTest {
     block = mock(Block.class, RETURNS_DEEP_STUBS);
     transaction = mock(Transaction.class, RETURNS_DEEP_STUBS);
     when(transaction.getPayload().getReducedPayload().getCreatorAccountId())
-        .thenReturn(SUPERUSER__ID);
+        .thenReturn(SUPERUSER_ID);
     final Command command = mock(Command.class);
     final TransferAsset transferAsset = mock(TransferAsset.class);
-    when(transferAsset.getSrcAccountId()).thenReturn(SUPERUSER__ID);
+    when(transferAsset.getSrcAccountId()).thenReturn(SUPERUSER_ID);
     when(transferAsset.getDestAccountId()).thenReturn(BRVS_ID);
     when(transferAsset.getAmount()).thenReturn(TOTAL_AMOUNT);
     when(transferAsset.getAssetId()).thenReturn(VAL_ASSET_ID);
@@ -82,7 +82,7 @@ public class ValDistributionReactionTest {
             BRVS_ID,
             ValidationUtils.generateKeypair()
         ),
-        SUPERUSER__ID,
+        SUPERUSER_ID,
         irohaQueryHelper,
         new RegisteredUsersStorage() {
 
