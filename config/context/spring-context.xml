@@ -124,6 +124,10 @@
     <constructor-arg name="projectAccountProvider" ref="soraProjectsProvider"/>
   </bean>
 
+  <!-- XOR TRANSFER FILTER CONFIG -->
+  <bean id="xorTransfersFilter"
+    class="iroha.validation.transactions.filter.sora.XorTransfersTemporaryIgnoringFilter"/>
+
   <!--  VAL DISTRIBUTION CONFIG -->
   <bean id="valDistributionLogic"
     class="iroha.validation.transactions.plugin.impl.sora.ValDistributionPluggableLogic">
@@ -143,10 +147,6 @@
     <ref bean="soraDistributionLogic"/>
     <ref bean="valDistributionLogic"/>
   </util:list>
-
-  <!-- XOR TRANSFER FILTER CONFIG -->
-  <bean id="xorTransfersFilter"
-    class="iroha.validation.transactions.filter.sora.XorTransfersTemporaryIgnoringFilter"/>
 
   <util:list id="filterList" list-class="java.util.ArrayList"
     value-type="iroha.validation.transactions.filter.TransactionBatchFilter">
