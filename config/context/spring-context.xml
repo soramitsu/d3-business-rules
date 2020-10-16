@@ -69,7 +69,8 @@
   </bean>
 
   <!-- USER STORAGE CONFIG -->
-  <bean id="userStorage" class="iroha.validation.transactions.core.provider.impl.RegisteredUsersStorageImpl">
+  <bean id="userStorage"
+    class="iroha.validation.transactions.core.provider.impl.RegisteredUsersStorageImpl">
     <constructor-arg name="mongoHost" value="${MONGO_HOST}"/>
     <constructor-arg name="mongoPort" value="${MONGO_PORT}"/>
   </bean>
@@ -87,7 +88,7 @@
     <constructor-arg name="registeredUsersStorage" ref="userStorage"/>
   </bean>
 
-  <!--  SORA PROJECT PROVIDER CONFIG-->
+  <!--  SORA PROJECT PROVIDER CONFIG -->
   <bean id="soraProjectsProvider"
     class="iroha.validation.transactions.plugin.impl.sora.ProjectAccountProvider">
     <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
@@ -95,7 +96,7 @@
     <constructor-arg name="accountsSetter" value="${SORA_DISTRIBUTION_PROJECTS_SETTER}"/>
   </bean>
 
-  <!--  SORA DISTRIBUTION CONFIG-->
+  <!--  SORA DISTRIBUTION CONFIG -->
   <bean id="soraDistributionLogic"
     class="iroha.validation.transactions.plugin.impl.sora.SoraDistributionPluggableLogic">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
@@ -105,38 +106,37 @@
     <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
   </bean>
 
-  <!--  QUORUM REACTION CONFIG-->
+  <!--  QUORUM REACTION CONFIG -->
   <bean id="quorumReactionLogic"
     class="iroha.validation.transactions.plugin.impl.QuorumReactionPluggableLogic">
     <constructor-arg name="accountManager" ref="accountManager"/>
   </bean>
 
-  <!--  REGISTRATION REACTION CONFIG-->
+  <!--  REGISTRATION REACTION CONFIG -->
   <bean id="registrationReactionLogic"
     class="iroha.validation.transactions.plugin.impl.RegistrationReactionPluggableLogic">
     <constructor-arg name="registrationProvider" ref="accountManager"/>
   </bean>
 
-  <!--  PROJECT ACCOUNTS REACTION CONFIG-->
+  <!--  PROJECT ACCOUNTS REACTION CONFIG -->
   <bean id="projectAccountsReactionLogic"
     class="iroha.validation.transactions.plugin.impl.sora.NewProjectReactionPluggableLogic">
     <constructor-arg name="projectAccountProvider" ref="soraProjectsProvider"/>
   </bean>
 
-  <!-- ATOMIC REFERENCE OF WITHDRAWAL LIMITS-->
-  <bean id="xorWithdrawalLimitRemainderReference"
-    class="java.util.concurrent.atomic.AtomicReference"/>
+  <!-- XOR TRANSFER FILTER CONFIG -->
+  <bean id="xorTransfersFilter"
+    class="iroha.validation.transactions.filter.sora.XorTransfersTemporaryIgnoringFilter"/>
 
-  <!-- WITHDRAWAL REACTION LOGIC-->
-  <bean id="withdrawalReactionLogic"
-    class="iroha.validation.transactions.plugin.impl.sora.XorWithdrawalLimitReactionPluggableLogic">
+  <!--  VAL DISTRIBUTION CONFIG -->
+  <bean id="valDistributionLogic"
+    class="iroha.validation.transactions.plugin.impl.sora.ValDistributionPluggableLogic">
     <constructor-arg name="queryAPI" ref="queryAPI"/>
+    <constructor-arg name="infoSetterAccount" value="${VAL_DISTRIBUTION_SETTER}"/>
     <constructor-arg name="irohaQueryHelper" ref="queryHelper"/>
-    <constructor-arg name="limitHolderAccount" value="${SORA_WITHDRAWAL_LIMIT_HOLDER_ACCOUNT_ID}"/>
-    <constructor-arg name="limitSetterAccount" value="${SORA_WITHDRAWAL_LIMIT_SETTER_ACCOUNT_ID}"/>
-    <constructor-arg name="xorWithdrawalLimitRemainder" ref="xorWithdrawalLimitRemainderReference"/>
-    <constructor-arg name="withdrawalAccountId" value="${SORA_WITHDRAWAL_ACCOUNT_ID}"/>
-    <constructor-arg name="registrationProvider" ref="accountManager"/>
+    <constructor-arg name="registeredUsersStorage" ref="userStorage"/>
+    <constructor-arg name="totalProportionPool" value="${VAL_DISTRIBUTION_XOR_POOL}"/>
+    <constructor-arg name="xorTransfersTemporaryIgnoringFilter" ref="xorTransfersFilter"/>
   </bean>
 
   <util:list id="logicList" list-class="java.util.ArrayList"
@@ -145,7 +145,12 @@
     <ref bean="quorumReactionLogic"/>
     <ref bean="projectAccountsReactionLogic"/>
     <ref bean="soraDistributionLogic"/>
-    <ref bean="withdrawalReactionLogic"/>
+    <ref bean="valDistributionLogic"/>
+  </util:list>
+
+  <util:list id="filterList" list-class="java.util.ArrayList"
+    value-type="iroha.validation.transactions.filter.TransactionBatchFilter">
+    <ref bean="xorTransfersFilter"/>
   </util:list>
 
   <!-- PROVIDER CONFIG -->
@@ -156,6 +161,7 @@
     <constructor-arg name="registrationProvider" ref="accountManager"/>
     <constructor-arg name="irohaReliableChainListener" ref="irohaReliableChainListener"/>
     <constructor-arg name="pluggableLogicList" ref="logicList"/>
+    <constructor-arg name="transactionFilterList" ref="filterList"/>
     <constructor-arg name="pendingPollingPeriod" value="${PENDING_POLLING_PERIOD}"/>
   </bean>
 
@@ -228,17 +234,11 @@
     <constructor-arg name="exchangerAccount" value="${BILLING_EXCHANGERACCOUNT}"/>
   </bean>
   <bean id="quorumBanRule" class="iroha.validation.rules.impl.core.NoQuorumModificationsRule"/>
-  <bean id="xorWithdrawalLimitRule" class="iroha.validation.rules.impl.sora.XorWithdrawalLimitRule">
-    <constructor-arg name="withdrawalAccountId" value="${SORA_WITHDRAWAL_ACCOUNT_ID}"/>
-    <constructor-arg name="xorWithdrawalLimitRemainder" ref="xorWithdrawalLimitRemainderReference"/>
-    <constructor-arg name="isDisabled" value="${SORA_WITHDRAWAL_LIMIT_DISABLED}"/>
-  </bean>
   <util:map id="rules" map-class="java.util.HashMap">
     <entry key="restrictedKeysRule" value-ref="restrictedKeysRule"/>
     <entry key="minKeysRule" value-ref="minKeysRule"/>
     <entry key="billingRule" value-ref="billingRule"/>
     <entry key="quorumBanRule" value-ref="quorumBanRule"/>
-    <entry key="xorWithdrawalLimitRule" value-ref="xorWithdrawalLimitRule"/>
     <!-- More can be added -->
   </util:map>
 

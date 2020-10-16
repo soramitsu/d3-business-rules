@@ -7,8 +7,6 @@ package iroha.validation.transactions.core.provider;
 
 import java.util.Set;
 
-import java.util.Set;
-
 public interface UserQuorumProvider {
 
   /**

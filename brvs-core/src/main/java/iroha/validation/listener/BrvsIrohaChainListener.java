@@ -85,12 +85,6 @@ public class BrvsIrohaChainListener implements Closeable {
         .map(ValidationUtils::hexHash)
         .collect(Collectors.toList())
     );
-    logger.info("Got {} pending batches from Iroha", pendingTransactions.size());
-    logger.debug("Hashes: {}", pendingTransactions
-        .stream()
-        .map(ValidationUtils::hexHash)
-        .collect(Collectors.toList())
-    );
     return pendingTransactions;
   }
 
