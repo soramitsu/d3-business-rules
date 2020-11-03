@@ -46,9 +46,10 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
     if (Strings.isNullOrEmpty(userDomains)) {
       throw new IllegalArgumentException("User domains string must not be null nor empty");
     }
-    final Set<String> domainsList = Arrays
+    final Set<Pattern> domainsList = Arrays
         .stream(userDomains.split(","))
         .map(domain -> accountIdDelimiter + domain)
+        .map(Pattern::compile)
         .collect(Collectors.toSet());
     this.userDomainMongoQuery = new Document(
         OR_OPERATOR,
@@ -56,10 +57,7 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
             .stream()
             .map(domain -> new Document(
                     USER_ID_ATTRIBUTE,
-                    Pattern.compile(
-                        domain,
-                        Pattern.CASE_INSENSITIVE
-                    )
+                    domain
                 )
             )
             .collect(Collectors.toList())
