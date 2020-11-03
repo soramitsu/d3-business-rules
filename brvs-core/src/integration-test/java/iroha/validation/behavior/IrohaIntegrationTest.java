@@ -1147,7 +1147,7 @@ public class IrohaIntegrationTest {
         .build();
 
     final String txHash = ValidationUtils.hexHash(transaction);
-    irohaAPI.transaction(transaction, terminalStrategy);
+    irohaAPI.transactionSync(transaction);
 
     Thread.sleep(6000);
 
