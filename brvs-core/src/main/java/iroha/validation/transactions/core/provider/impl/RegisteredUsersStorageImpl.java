@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.bson.Document;
 
@@ -31,7 +32,7 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
   private static final String DEFAULT_DB_NAME = "userStorage";
   private static final String DEFAULT_COLLECTION_NAME = "users";
   private static final String USER_ID_ATTRIBUTE = "userId";
-  private static final String SLASH_WITH_DELIMITER = "/" + accountIdDelimiter;
+  private static final String OR_OPERATOR = "$or";
 
   // account_id like %domain1 or like %domain2 etc
   private final Document userDomainMongoQuery;
@@ -47,13 +48,20 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
     }
     final Set<String> domainsList = Arrays
         .stream(userDomains.split(","))
+        .map(domain -> accountIdDelimiter + domain)
         .collect(Collectors.toSet());
     this.userDomainMongoQuery = new Document(
-        "$or",
+        OR_OPERATOR,
         domainsList
             .stream()
-            .map(domain -> SLASH_WITH_DELIMITER + domain)
-            .map(domainWithSlashes -> new Document(USER_ID_ATTRIBUTE, domainWithSlashes))
+            .map(domain -> new Document(
+                    USER_ID_ATTRIBUTE,
+                    Pattern.compile(
+                        domain,
+                        Pattern.CASE_INSENSITIVE
+                    )
+                )
+            )
             .collect(Collectors.toList())
     );
   }
