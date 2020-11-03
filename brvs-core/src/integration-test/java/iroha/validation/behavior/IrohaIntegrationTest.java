@@ -1136,7 +1136,7 @@ public class IrohaIntegrationTest {
   @Test
   void createTransactionFromUserNotInBrvsControlledDomain() throws InterruptedException {
     String newAccountName = "abcdefg";
-    TransactionOuterClass.Transaction transaction = Transaction.builder(receiverId)
+    TransactionOuterClass.Transaction transaction = Transaction.builder(fakeReceiverId)
         .createAccount(
             newAccountName,
             serviceDomainName,
@@ -1155,7 +1155,7 @@ public class IrohaIntegrationTest {
 
     // query Iroha and check
     String newAccountId = String.format("%s@%s", newAccountName, serviceDomainName);
-    Account accountResponse = irohaAPI.query(new QueryBuilder(receiverId, Instant.now(), 1)
+    Account accountResponse = irohaAPI.query(new QueryBuilder(fakeReceiverId, Instant.now(), 1)
         .getAccount(newAccountId)
         .buildSigned(receiverKeypair))
         .getAccountResponse()
