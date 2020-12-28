@@ -32,7 +32,7 @@ public class ServiceController {
   public Response isHealthy() {
     final Instant instant = lastQueryingTimestamp.get();
     if (instant != null && instant.plusSeconds(SECONDS).isBefore(Instant.now())) {
-      Response.ok(DOWN).build();
+      return Response.ok(DOWN).build();
     }
     return Response.ok(UP).build();
   }
