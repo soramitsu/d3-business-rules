@@ -181,6 +181,7 @@
     <constructor-arg name="queryAPI" ref="queryAPI"/>
     <constructor-arg name="userKeyPair" ref="firstUserKey"/>
     <constructor-arg name="registeredUsersStorage" ref="userStorage"/>
+    <constructor-arg name="lastQueryingTimestamp" ref="timestampForQueries"/>
   </bean>
 
   <!-- SIGNER CONFIG -->
