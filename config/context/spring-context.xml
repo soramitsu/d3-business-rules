@@ -242,11 +242,15 @@
     <constructor-arg name="exchangerAccount" value="${BILLING_EXCHANGERACCOUNT}"/>
   </bean>
   <bean id="quorumBanRule" class="iroha.validation.rules.impl.core.NoQuorumModificationsRule"/>
+  <bean id="assetsBlockedRule" class="iroha.validation.rules.impl.sora.AssetTransferBlockedRule">
+    <constructor-arg name="assetsBlocked" value="${BLOCKED_ASSETS}"/>
+  </bean>
   <util:map id="rules" map-class="java.util.HashMap">
     <entry key="restrictedKeysRule" value-ref="restrictedKeysRule"/>
     <entry key="minKeysRule" value-ref="minKeysRule"/>
     <entry key="billingRule" value-ref="billingRule"/>
     <entry key="quorumBanRule" value-ref="quorumBanRule"/>
+    <entry key="assetsBlockedRule" value-ref="assetsBlockedRule"/>
     <!-- More can be added -->
   </util:map>
 
