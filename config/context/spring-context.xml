@@ -204,6 +204,12 @@
     <constructor-arg name="hostname" value="${BRVS_LOCALHOSTNAME}"/>
   </bean>
 
+  <!-- BRVS STARTUP LOGIC -->
+  <util:list id="startupLogicList" list-class="java.util.ArrayList"
+    value-type="iroha.validation.transactions.startup.StartupLogic">
+    <!-- TO ADD -->
+  </util:list>
+
   <!-- SERVICE CONFIG -->
   <bean id="serviceContext" class="iroha.validation.config.ValidationServiceContext">
     <constructor-arg name="validator" ref="simpleAggregationValidator"/>
@@ -214,6 +220,7 @@
     <constructor-arg name="ruleMonitor">
       <null/>
     </constructor-arg>
+    <constructor-arg name="startupLogicList" ref="startupLogicList"/>
   </bean>
 
   <bean class="iroha.validation.service.impl.ValidationServiceImpl">
