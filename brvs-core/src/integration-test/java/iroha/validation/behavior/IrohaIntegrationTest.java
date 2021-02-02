@@ -103,6 +103,7 @@ public class IrohaIntegrationTest {
   private static final KeyPair projectSetterKeypair = crypto.generateKeypair();
   private static final String serviceDomainName = "sora";
   private static final String userDomainName = "user";
+  private static final String secondUserDomainName = "usertwo";
   private static final String fakeUserDomainName = "fake";
   private static final String roleName = "user";
   private static final String senderName = "sender";
@@ -132,7 +133,7 @@ public class IrohaIntegrationTest {
   private static final String receiverId = String.format("%s@%s", receiverName, userDomainName);
   private static final String userToUnregisterName = "unregisterme";
   private static final String userToUnregisterId = String
-      .format("%s@%s", userToUnregisterName, userDomainName);
+      .format("%s@%s", userToUnregisterName, secondUserDomainName);
   private static final String fakeReceiverId = String
       .format("%s@%s", receiverName, fakeUserDomainName);
   private static final String validatorName = "brvs";
@@ -201,6 +202,7 @@ public class IrohaIntegrationTest {
                 )
                 .createDomain(serviceDomainName, roleName)
                 .createDomain(userDomainName, roleName)
+                .createDomain(secondUserDomainName, roleName)
                 .createDomain(fakeUserDomainName, roleName)
                 // brvs accounts
                 .createAccount(validatorName, serviceDomainName, validatorKeypair.getPublic())
@@ -208,7 +210,7 @@ public class IrohaIntegrationTest {
                 // create receiver acc
                 .createAccount(receiverName, userDomainName, receiverKeypair.getPublic())
                 // create user to unregister acc
-                .createAccount(userToUnregisterName, userDomainName,
+                .createAccount(userToUnregisterName, secondUserDomainName,
                     userToUnregisterKeypair.getPublic())
                 // create sender acc
                 .createAccount(senderName, userDomainName, senderKeypair.getPublic())
@@ -220,7 +222,7 @@ public class IrohaIntegrationTest {
                 .setAccountDetail(String.format("%s@%s", serviceDomainName, serviceDomainName),
                     receiverName + userDomainName, userDomainName)
                 .setAccountDetail(String.format("%s@%s", serviceDomainName, serviceDomainName),
-                    userToUnregisterName + userDomainName, userDomainName)
+                    userToUnregisterName + secondUserDomainName, secondUserDomainName)
                 .createAccount("rmq", serviceDomainName, Utils.parseHexPublicKey(
                     "7a4af859a775dd7c7b4024c97c8118f0280455b8135f6f41422101f0397e0fa5"))
                 .createAsset(asset, serviceDomainName, 18)
