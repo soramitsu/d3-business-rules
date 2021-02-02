@@ -428,7 +428,8 @@ public class IrohaIntegrationTest {
             validatorId,
             validator,
             irohaQueryHelper
-        )
+        ),
+        Collections.emptyList()
     ));
   }
 
