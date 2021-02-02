@@ -24,6 +24,7 @@ import com.d3.chainadapter.client.RMQConfig;
 import com.d3.commons.sidechain.iroha.util.IrohaQueryHelper;
 import com.d3.commons.sidechain.iroha.util.impl.IrohaQueryHelperImpl;
 import com.google.common.io.Files;
+import com.google.protobuf.ProtocolStringList;
 import iroha.protocol.BlockOuterClass;
 import iroha.protocol.Endpoint.TxStatus;
 import iroha.protocol.Primitive.GrantablePermission;
@@ -69,7 +70,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import jp.co.soramitsu.iroha.java.IrohaAPI;
 import jp.co.soramitsu.iroha.java.QueryAPI;
@@ -97,6 +97,7 @@ public class IrohaIntegrationTest {
   private static final KeyPair peerKeypair = crypto.generateKeypair();
   private static final KeyPair senderKeypair = crypto.generateKeypair();
   private static final KeyPair receiverKeypair = crypto.generateKeypair();
+  private static final KeyPair userToUnregisterKeypair = crypto.generateKeypair();
   private static final KeyPair validatorKeypair = crypto.generateKeypair();
   private static final KeyPair projectOwnerKeypair = crypto.generateKeypair();
   private static final KeyPair projectSetterKeypair = crypto.generateKeypair();
@@ -129,7 +130,11 @@ public class IrohaIntegrationTest {
   private static final String senderId = String.format("%s@%s", senderName, userDomainName);
   private static final String receiverName = "receiver";
   private static final String receiverId = String.format("%s@%s", receiverName, userDomainName);
-  private static final String fakeReceiverId = String.format("%s@%s", receiverName, fakeUserDomainName);
+  private static final String userToUnregisterName = "unregisterme";
+  private static final String userToUnregisterId = String
+      .format("%s@%s", userToUnregisterName, userDomainName);
+  private static final String fakeReceiverId = String
+      .format("%s@%s", receiverName, fakeUserDomainName);
   private static final String validatorName = "brvs";
   private static final String validatorConfigName = "brvssettings";
   private static final String validatorId = String
@@ -175,6 +180,7 @@ public class IrohaIntegrationTest {
                 .createRole(roleName,
                     Arrays.asList(
                         RolePermission.can_add_signatory,
+                        RolePermission.can_remove_signatory,
                         RolePermission.can_create_account,
                         RolePermission.can_get_all_signatories,
                         RolePermission.can_get_all_accounts,
@@ -186,6 +192,7 @@ public class IrohaIntegrationTest {
                         RolePermission.can_get_all_acc_ast,
                         RolePermission.can_get_all_acc_detail,
                         RolePermission.can_grant_can_add_my_signatory,
+                        RolePermission.can_grant_can_remove_my_signatory,
                         RolePermission.can_grant_can_set_my_quorum,
                         RolePermission.can_set_detail,
                         RolePermission.can_get_blocks,
@@ -200,6 +207,9 @@ public class IrohaIntegrationTest {
                 .createAccount(validatorConfigName, serviceDomainName, validatorKeypair.getPublic())
                 // create receiver acc
                 .createAccount(receiverName, userDomainName, receiverKeypair.getPublic())
+                // create user to unregister acc
+                .createAccount(userToUnregisterName, userDomainName,
+                    userToUnregisterKeypair.getPublic())
                 // create sender acc
                 .createAccount(senderName, userDomainName, senderKeypair.getPublic())
                 // account holder
@@ -209,6 +219,8 @@ public class IrohaIntegrationTest {
                     senderName + userDomainName, userDomainName)
                 .setAccountDetail(String.format("%s@%s", serviceDomainName, serviceDomainName),
                     receiverName + userDomainName, userDomainName)
+                .setAccountDetail(String.format("%s@%s", serviceDomainName, serviceDomainName),
+                    userToUnregisterName + userDomainName, userDomainName)
                 .createAccount("rmq", serviceDomainName, Utils.parseHexPublicKey(
                     "7a4af859a775dd7c7b4024c97c8118f0280455b8135f6f41422101f0397e0fa5"))
                 .createAsset(asset, serviceDomainName, 18)
@@ -455,18 +467,28 @@ public class IrohaIntegrationTest {
 
     irohaAPI.transactionSync(Transaction.builder(senderId)
         .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
+        .grantPermission(validatorId, GrantablePermission.can_remove_my_signatory)
         .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
         .sign(senderKeypair)
         .build()
     );
     irohaAPI.transactionSync(Transaction.builder(receiverId)
         .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
+        .grantPermission(validatorId, GrantablePermission.can_remove_my_signatory)
         .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
         .sign(receiverKeypair)
         .build()
     );
+    irohaAPI.transactionSync(Transaction.builder(userToUnregisterId)
+        .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
+        .grantPermission(validatorId, GrantablePermission.can_remove_my_signatory)
+        .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
+        .sign(userToUnregisterKeypair)
+        .build()
+    );
     irohaAPI.transactionSync(Transaction.builder(fakeReceiverId)
         .grantPermission(validatorId, GrantablePermission.can_add_my_signatory)
+        .grantPermission(validatorId, GrantablePermission.can_remove_my_signatory)
         .grantPermission(validatorId, GrantablePermission.can_set_my_quorum)
         .sign(receiverKeypair)
         .build()
@@ -1164,5 +1186,25 @@ public class IrohaIntegrationTest {
         .getAccountResponse()
         .getAccount();
     assertEquals("", accountResponse.getAccountId());
+  }
+
+  /**
+   * @given {@link ValidationService} instance with "user" user domain configured
+   * @when unregistering is triggered
+   * @then no more brvs keys are stored in the account
+   */
+  @Test
+  void unregisterUser() throws InterruptedException {
+    accountManager.unRegister(userToUnregisterId);
+
+    Thread.sleep(1000);
+
+    assertEquals(1, queryAPI.getAccount(userToUnregisterId).getAccount().getQuorum());
+    final ProtocolStringList keysList = queryAPI.getSignatories(userToUnregisterId).getKeysList();
+    assertEquals(1, keysList.size());
+    assertEquals(
+        Utils.toHex(userToUnregisterKeypair.getPublic().getEncoded()).toLowerCase(),
+        keysList.get(0).toLowerCase()
+    );
   }
 }

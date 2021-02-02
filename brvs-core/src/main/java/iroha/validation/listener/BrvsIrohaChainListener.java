@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.security.KeyPair;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -139,7 +140,16 @@ public class BrvsIrohaChainListener implements Closeable {
 
     if (queryResponse.hasErrorResponse()) {
       ErrorResponse errorResponse = queryResponse.getErrorResponse();
-      throw new ErrorResponseException(errorResponse);
+      final ErrorResponseException responseException = new ErrorResponseException(errorResponse);
+      if (errorResponse.getErrorCode() == 3) {
+        // okay to appear for 1-2 polling iterations, must not last for a long time in case of unregistering
+        logger.warn(
+            "Consider checking BRVS keys or ignore this in case of accounts unregistering",
+            responseException
+        );
+        return Collections.emptyList();
+      }
+      throw responseException;
     }
 
     return queryResponse

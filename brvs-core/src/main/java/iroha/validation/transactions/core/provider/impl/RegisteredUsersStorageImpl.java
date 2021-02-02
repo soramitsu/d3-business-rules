@@ -78,6 +78,11 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
   }
 
   @Override
+  public void remove(String accountId) {
+    collection.deleteOne(eq(USER_NAME_ATTRIBUTE, accountId));
+  }
+
+  @Override
   public <T> Set<T> process(Function<Iterable<String>, Collection<T>> method) {
     final Set<T> resultSet = new HashSet<>();
     int pageCounter = 0;

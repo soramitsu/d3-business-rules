@@ -18,6 +18,14 @@ public interface UserQuorumProvider {
   Set<String> getUserSignatoriesDetail(String targetAccount);
 
   /**
+   * Method for getting all keypairs contained in users acccount
+   *
+   * @param targetAccount account id in Iroha
+   * @return signatories (public keys)
+   */
+  Set<String> getUserSignatories(String targetAccount);
+
+  /**
    * Method for setting relevant user related keypairs contained in users quorum
    *
    * @param targetAccount account id in Iroha
