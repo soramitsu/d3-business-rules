@@ -290,7 +290,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
 
   @Override
   public void unRegister(String accountId) {
-    logger.info("Unregistering " + accountId);
+    logger.info("Unregistering {}", accountId);
     final Set<String> detail = getUserSignatoriesDetail(accountId);
 
     // by default all accounts have one key

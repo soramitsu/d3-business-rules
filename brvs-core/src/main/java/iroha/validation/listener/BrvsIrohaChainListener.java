@@ -41,8 +41,9 @@ import org.slf4j.LoggerFactory;
  */
 public class BrvsIrohaChainListener implements Closeable {
 
-  private static final String BRVS_QUEUE_RMQ_NAME = "brvs";
   private static final Logger logger = LoggerFactory.getLogger(BrvsIrohaChainListener.class);
+  private static final String BRVS_QUEUE_RMQ_NAME = "brvs";
+  private static final int QUERY_SIGNATURE_ERROR_CODE = 3;
   private static AtomicLong counter = new AtomicLong(1);
 
   private final IrohaAPI irohaAPI;
@@ -141,7 +142,7 @@ public class BrvsIrohaChainListener implements Closeable {
     if (queryResponse.hasErrorResponse()) {
       ErrorResponse errorResponse = queryResponse.getErrorResponse();
       final ErrorResponseException responseException = new ErrorResponseException(errorResponse);
-      if (errorResponse.getErrorCode() == 3) {
+      if (errorResponse.getErrorCode() == QUERY_SIGNATURE_ERROR_CODE) {
         // okay to appear for 1-2 polling iterations, must not last for a long time in case of unregistering
         logger.warn(
             "Consider checking BRVS keys or ignore this in case of accounts unregistering",
