@@ -27,6 +27,13 @@ public interface RegistrationProvider {
   void register(Collection<String> accountIds) throws InterruptedException;
 
   /**
+   * Method for unregistering user account for the service
+   *
+   * @param accountId client account id in Iroha
+   */
+  void unRegister(String accountId);
+
+  /**
    * Queries Iroha for all unregistered user accounts and applies the logic supplied
    *
    * @param method {@link Function} to apply to unregistered accounts

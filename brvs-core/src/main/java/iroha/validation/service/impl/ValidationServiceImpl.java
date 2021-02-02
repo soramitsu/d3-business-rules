@@ -21,6 +21,7 @@ import iroha.validation.transactions.core.provider.TransactionProvider;
 import iroha.validation.transactions.core.provider.impl.AccountManager;
 import iroha.validation.transactions.core.provider.impl.util.BrvsData;
 import iroha.validation.transactions.core.signatory.TransactionSigner;
+import iroha.validation.transactions.startup.StartupLogic;
 import iroha.validation.validators.Validator;
 import iroha.validation.verdict.ValidationResult;
 import iroha.validation.verdict.Verdict;
@@ -45,6 +46,7 @@ public class ValidationServiceImpl implements ValidationService, Closeable {
   private final RegistrationProvider registrationProvider;
   private final BrvsData brvsData;
   private final RuleMonitor ruleMonitor;
+  private final List<StartupLogic> startupLogicList;
   private final Scheduler mainScheduler = Schedulers.from(createPrettySingleThreadPool(
       "brvs", "main"
   ));
@@ -59,6 +61,7 @@ public class ValidationServiceImpl implements ValidationService, Closeable {
     this.registrationProvider = validationServiceContext.getRegistrationProvider();
     this.brvsData = validationServiceContext.getBrvsData();
     this.ruleMonitor = validationServiceContext.getRuleMonitor();
+    this.startupLogicList = validationServiceContext.getStartupLogicList();
   }
 
   /**
@@ -70,6 +73,7 @@ public class ValidationServiceImpl implements ValidationService, Closeable {
     if (ruleMonitor != null) {
       ruleMonitor.monitorUpdates();
     }
+    startupLogicList.forEach(StartupLogic::apply);
     transactionProvider.getPendingTransactionsStreaming()
         .observeOn(mainScheduler)
         .flatMap(transactionBatch ->
