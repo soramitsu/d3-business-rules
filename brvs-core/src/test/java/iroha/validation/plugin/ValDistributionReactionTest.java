@@ -102,6 +102,11 @@ public class ValDistributionReactionTest {
           }
 
           @Override
+          public void removeByDomain(String domain) {
+
+          }
+
+          @Override
           public <T> Set<T> process(Function<Iterable<String>, Collection<T>> method) {
             return new HashSet<>(method.apply(Collections.singleton(USER_ID)));
           }

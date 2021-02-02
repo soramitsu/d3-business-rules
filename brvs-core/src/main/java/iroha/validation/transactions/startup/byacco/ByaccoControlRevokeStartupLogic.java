@@ -37,15 +37,15 @@ public class ByaccoControlRevokeStartupLogic implements StartupLogic {
   @Override
   public void apply() {
     logger.info("Applying startup logic to revoke Byacco accounts access");
-    //to prevent wrong pagination in case of immediate deletion
-    registeredUsersStorage.process(this::processInternally).forEach(registeredUsersStorage::remove);
+    final Set<String> userDomains = registrationProvider.getUserDomains();
+    registeredUsersStorage.process(accounts -> processInternally(accounts, userDomains));
+    userDomains.forEach(registeredUsersStorage::removeByDomain);
     logger.info("Finished applying startup logic to revoke Byacco accounts access");
   }
 
-  private Collection<String> processInternally(Iterable<String> accountIds) {
-    final Set<String> userDomains = registrationProvider.getUserDomains();
+  private Collection<String> processInternally(Iterable<String> accountIds, Set<String> domains) {
     return StreamSupport.stream(accountIds.spliterator(), false)
-        .filter(userDomains::contains)
+        .filter(domains::contains)
         .peek(this::revokeKeysAndQuorum)
         .collect(Collectors.toSet());
   }

@@ -34,6 +34,13 @@ public interface RegisteredUsersStorage {
   void remove(String accountId);
 
   /**
+   * Method for removing user accounts belonging to the domain from the storage
+   *
+   * @param domain client account domain in Iroha
+   */
+  void removeByDomain(String domain);
+
+  /**
    * Method for getting all the registered user accounts
    *
    * @param method {@link Function} to apply to all the users contained
