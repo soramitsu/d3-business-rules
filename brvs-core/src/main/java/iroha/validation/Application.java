@@ -11,8 +11,10 @@ import iroha.validation.transactions.core.provider.RegistrationProvider;
 import iroha.validation.transactions.core.storage.TransactionVerdictStorage;
 import java.net.PortUnreachableException;
 import java.net.URI;
-import java.security.KeyPair;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.LogManager;
+import org.glassfish.hk2.api.TypeLiteral;
 import org.glassfish.hk2.utilities.binding.AbstractBinder;
 import org.glassfish.jersey.grizzly2.httpserver.GrizzlyHttpServerFactory;
 import org.glassfish.jersey.server.ResourceConfig;
@@ -56,6 +58,8 @@ public class Application {
       protected void configure() {
         bind(context.getBean(TransactionVerdictStorage.class)).to(TransactionVerdictStorage.class);
         bind(context.getBean(RegistrationProvider.class)).to(RegistrationProvider.class);
+        bind(context.getBean("timestampForQueries", AtomicReference.class))
+            .to(new TypeLiteral<AtomicReference<Instant>>() {});
       }
     });
     resourceConfig.register(new CrossDomainFilter());
