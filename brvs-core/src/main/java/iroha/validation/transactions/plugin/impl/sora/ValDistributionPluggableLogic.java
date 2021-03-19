@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.security.KeyPair;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -134,7 +135,7 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
     xorTransfersTemporaryIgnoringFilter.enable();
     logger.info("Triggered VAL distribution of {} VALs", amountToDistribute.toPlainString());
     final Set<DistributionEntry> transactionsContext =
-        registeredUsersStorage.process((userAccounts) ->
+        new HashSet<>(registeredUsersStorage.process((userAccounts) ->
             StreamSupport.stream(userAccounts.spliterator(), false)
                 .map(userAccount -> new DistributionEntry(
                         userAccount,
@@ -145,7 +146,7 @@ public class ValDistributionPluggableLogic extends PluggableLogic<BigDecimal> {
                     )
                 )
                 .filter(entry -> entry.amount.signum() == 1)
-                .collect(Collectors.toList()));
+                .collect(Collectors.toList())));
 
     constructAndSendDistributions(transactionsContext, brvsValBalance);
   }

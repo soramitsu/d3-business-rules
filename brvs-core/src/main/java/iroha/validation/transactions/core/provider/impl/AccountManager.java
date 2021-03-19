@@ -291,10 +291,10 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
   @Override
   public void unRegister(String accountId) {
     logger.info("Unregistering {}", accountId);
-    final Set<String> detail = getUserSignatoriesDetail(accountId);
+    final int currentQuorum = getUserAccountQuorum(accountId);
 
     // by default all accounts have one key
-    setUserAccountQuorum(accountId, detail.isEmpty() ? INITIAL_USER_QUORUM_VALUE : detail.size());
+    setUserQuorumIroha(accountId, currentQuorum / PROPORTION);
     setUserQuorumDetail(accountId, Collections.emptySet());
     setBrvsSignatoriesToUser(accountId, ZERO);
   }
