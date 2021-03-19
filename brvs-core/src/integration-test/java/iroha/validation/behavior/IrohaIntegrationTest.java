@@ -327,6 +327,7 @@ public class IrohaIntegrationTest {
   }
 
   private ValidationServiceImpl getService(IrohaAPI irohaAPI) {
+    final String userDomains = userDomainName + "," + secondUserDomainName;
     final String accountsHolderAccount = String.format(
         "%s@%s",
         serviceDomainName,
@@ -337,11 +338,11 @@ public class IrohaIntegrationTest {
     final RegisteredUsersStorage usersStorage = new RegisteredUsersStorageImpl(
         mongoHost,
         mongoPort,
-        userDomainName
+        userDomains
     );
     accountManager = new AccountManager(queryAPI,
         "uq",
-        userDomainName,
+        userDomains,
         accountsHolderAccount,
         validatorId,
         Collections.singletonList(validatorKeypair),

@@ -6,8 +6,6 @@
 package iroha.validation.transactions.core.provider;
 
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Set;
 import java.util.function.Function;
 
 public interface RegisteredUsersStorage {
