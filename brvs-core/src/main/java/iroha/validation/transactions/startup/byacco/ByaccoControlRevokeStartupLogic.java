@@ -5,6 +5,8 @@
 
 package iroha.validation.transactions.startup.byacco;
 
+import static iroha.validation.utils.ValidationUtils.getDomain;
+
 import iroha.validation.transactions.core.provider.RegisteredUsersStorage;
 import iroha.validation.transactions.core.provider.RegistrationProvider;
 import iroha.validation.transactions.startup.StartupLogic;
@@ -45,7 +47,7 @@ public class ByaccoControlRevokeStartupLogic implements StartupLogic {
 
   private Collection<String> processInternally(Iterable<String> accountIds, Set<String> domains) {
     return StreamSupport.stream(accountIds.spliterator(), false)
-        .filter(domains::contains)
+        .filter(accountId -> domains.contains(getDomain(accountId)))
         .peek(this::revokeKeysAndQuorum)
         .collect(Collectors.toSet());
   }
