@@ -6,7 +6,6 @@
 package iroha.validation.transactions.core.provider;
 
 import java.util.Collection;
-import java.util.Set;
 import java.util.function.Function;
 
 public interface RegisteredUsersStorage {
@@ -27,10 +26,24 @@ public interface RegisteredUsersStorage {
   boolean contains(String accountId);
 
   /**
+   * Method for removing the user account from the storage
+   *
+   * @param accountId client account ids in Iroha
+   */
+  void remove(String accountId);
+
+  /**
+   * Method for removing user accounts belonging to the domain from the storage
+   *
+   * @param domain client account domain in Iroha
+   */
+  void removeByDomain(String domain);
+
+  /**
    * Method for getting all the registered user accounts
    *
    * @param method {@link Function} to apply to all the users contained
-   * @return {@link Set} of specified type entries
+   * @return {@link Collection} of specified type entries
    */
-  <T> Set<T> process(Function<Iterable<String>, Collection<T>> method);
+  <T> Collection<T> process(Function<Iterable<String>, Collection<T>> method);
 }
