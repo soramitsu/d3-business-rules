@@ -6,6 +6,7 @@
 package iroha.validation.transactions.core.provider.impl;
 
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.regex;
 import static jp.co.soramitsu.iroha.java.detail.Const.accountIdDelimiter;
 
 import com.google.common.base.Strings;
@@ -75,6 +76,16 @@ public class RegisteredUsersStorageImpl extends MongoBasedStorage<UserAccountId>
   @Override
   public boolean contains(String accountId) {
     return collection.find(eq(USER_NAME_ATTRIBUTE, accountId)).first() != null;
+  }
+
+  @Override
+  public void remove(String accountId) {
+    collection.deleteOne(eq(USER_NAME_ATTRIBUTE, accountId));
+  }
+
+  @Override
+  public void removeByDomain(String domain) {
+    collection.deleteMany(regex(USER_NAME_ATTRIBUTE, Pattern.compile(".+@" + domain)));
   }
 
   @Override

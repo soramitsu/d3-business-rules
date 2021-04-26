@@ -34,6 +34,7 @@ import java.security.KeyPair;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -61,6 +62,7 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
 
   private static final Logger logger = LoggerFactory.getLogger(AccountManager.class);
   private static final int INITIAL_USER_QUORUM_VALUE = 1;
+  private static final int ZERO = 0;
   private static final int INITIAL_KEYS_AMOUNT = 1;
   private static final Type USER_SIGNATORIES_TYPE_TOKEN = new TypeToken<Set<String>>() {
   }.getType();
@@ -159,6 +161,10 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
           e
       );
     }
+  }
+
+  public Set<String> getUserSignatories(String targetAccount) {
+    return new HashSet<>(queryAPI.getSignatories(targetAccount).getKeysList());
   }
 
   /**
@@ -281,12 +287,23 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
     }
   }
 
+  @Override
+  public void unRegister(String accountId) {
+    logger.info("Unregistering {}", accountId);
+    final int currentQuorum = getUserAccountQuorum(accountId);
+
+    // by default all accounts have one key
+    setUserQuorumIroha(accountId, currentQuorum / PROPORTION);
+    setUserQuorumDetail(accountId, Collections.emptySet());
+    setBrvsSignatoriesToUser(accountId, ZERO);
+  }
+
   private void setBrvsSignatoriesToUser(String userAccountId, int count) {
-    if (count < 1 || count > keyPairs.size()) {
+    if (count < 0 || count > keyPairs.size()) {
       throw new IllegalArgumentException(
-          "Signatories count must be at least 1 and not more than key list size. Got " + count);
+          "Signatories count must be at least 0 and not more than key list size. Got " + count);
     }
-    final int containedCount = (int) getAccountSignatories(userAccountId)
+    final int containedCount = (int) getUserSignatories(userAccountId)
         .stream()
         .map(String::toLowerCase)
         .filter(pubKeys::contains)
@@ -329,10 +346,6 @@ public class AccountManager implements UserQuorumProvider, RegistrationProvider,
       userQuorum = INITIAL_USER_QUORUM_VALUE;
     }
     return (PROPORTION * userQuorum * getUserAccountQuorum(brvsAccountId));
-  }
-
-  private List<String> getAccountSignatories(String targetAccountId) {
-    return queryAPI.getSignatories(targetAccountId).getKeysList();
   }
 
   @Override
